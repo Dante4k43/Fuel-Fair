@@ -1,0 +1,115 @@
+:root {
+    --bg-dark: #0f172a;
+    --card-bg: #1e293b;
+    --brand-blue: #60a5fa;
+    --accent-green: #4ade80;
+    --accent-red: #f87171;
+    --text-main: #ffffff;
+    --text-muted: #94a3b8;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    margin: 0;
+    padding: 20px;
+}
+
+.app-container { width: 100%; max-width: 450px; }
+
+/* --- HOME PAGE / INDEX STYLES --- */
+.top-nav-right { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.profile-btn { font-size: 1.5rem; text-decoration: none; background: var(--card-bg); padding: 10px; border-radius: 50%; }
+
+.home-header { text-align: center; margin-bottom: 30px; }
+.home-header p { color: var(--text-muted); }
+
+.menu-grid { display: flex; flex-direction: column; gap: 15px; }
+
+.menu-card.rectangle {
+    display: flex;
+    align-items: center;
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 16px;
+    text-decoration: none;
+    color: white;
+    transition: transform 0.2s;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.menu-card:active { transform: scale(0.98); }
+
+.icon-box {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-right: 20px;
+}
+
+.icon-box.blue { background: rgba(96, 165, 250, 0.2); color: var(--brand-blue); }
+.icon-box.green { background: rgba(74, 222, 128, 0.2); color: var(--accent-green); }
+.icon-box.yellow { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+
+.card-content h3 { margin: 0; font-size: 1.1rem; }
+.card-content p { margin: 5px 0 0 0; font-size: 0.85rem; color: var(--text-muted); }
+
+/* --- CALCULATOR / CHECK-LOAD STYLES --- */
+.calculator-card {
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+}
+
+.input-group { margin-bottom: 15px; display: flex; flex-direction: column; }
+label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+input, select {
+    background: #0f172a;
+    border: 1px solid #334155;
+    padding: 14px;
+    color: white;
+    border-radius: 10px;
+    font-size: 1rem;
+}
+
+.form-row { display: flex; gap: 10px; }
+.form-row .input-group { flex: 1; }
+
+.primary-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--brand-blue);
+    border: none;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--bg-dark);
+    text-transform: uppercase;
+}
+
+#map-container { margin-top: 20px; border-radius: 16px; overflow: hidden; height: 200px; border: 1px solid #334155; }
+#map { height: 100%; width: 100%; z-index: 1; }
+
+.hidden { display: none; }
+
+.verdict-container { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 25px 0; }
+#score-circle {
+    width: 85px; height: 85px; border-radius: 50%; border: 6px solid var(--brand-blue);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+#score-value { font-size: 1.6rem; font-weight: 900; }
+
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stat-item { background: rgba(255,255,255,0.03); padding: 15px; border-radius: 14px; text-align: center; border: 1px solid rgba(255,255,255,0.05); }
+.full-width { grid-column: span 2; background: rgba(96, 165, 250, 0.05); }
+.danger-text { color: var(--accent-red) !important; }
+.success-text { color: var(--accent-green) !important; }

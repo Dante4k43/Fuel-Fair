@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Profit Engine | Load Analyzer</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <header class="home-header">
+      <a href="index.html" style="color: var(--brand-blue); text-decoration: none; float: left;">← Back</a>
+      <h1>Check Load</h1>
+    </header>
+
+    <main class="calculator-card">
+      <div class="input-group">
+        <label>Origin</label>
+        <input type="text" id="origin" placeholder="City, State" />
+      </div>
+
+      <div class="input-group">
+        <label>Destination</label>
+        <input type="text" id="destination" placeholder="City, State" />
+      </div>
+
+      <div class="input-group">
+        <label>Load Gross Pay ($)</label>
+        <input type="number" id="rate" placeholder="2500" />
+      </div>
+
+      <div class="form-row">
+        <div class="input-group">
+          <label>Total Miles</label>
+          <input type="number" id="miles" placeholder="850" />
+        </div>
+
+        <div class="input-group">
+          <label>Truck MPG</label>
+          <input type="number" id="mpg" value="6.5" step="0.1" />
+        </div>
+      </div>
+
+      <button id="analyze-btn" class="primary-btn" onclick="calculateProfit()">Analyze Profit</button>
+    </main>
+
+    <!-- ✅ Map always visible now (keeps same IDs + styling hooks) -->
+    <div id="map-container"><div id="map"></div></div>
+
+    <section id="results-display" class="hidden">
+      <div class="verdict-container">
+        <div id="score-circle">
+          <span id="score-value">--</span>
+        </div>
+        <h2 id="verdict-text">Analyzing...</h2>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-item">
+          <small>Net $/Mile</small><br />
+          <strong id="net-per-mile">$0.00</strong>
+        </div>
+
+        <div class="stat-item">
+          <small>Fuel Cost</small><br />
+          <strong id="total-fuel-cost" class="danger-text">$0</strong>
+        </div>
+
+        <div class="stat-item full-width">
+          <small>Net Take-Home (Profit)</small><br />
+          <strong id="net-revenue" class="success-text">$0</strong>
+        </div>
+      </div>
+
+      <button class="save-btn" onclick="saveThisLoad()">Save to History</button>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="js/check-load.js"></script>
+</body>
+</html>

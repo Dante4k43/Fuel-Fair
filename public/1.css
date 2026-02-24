@@ -1,0 +1,161 @@
+/* --- Global Reset & Variables --- */
+:root {
+    --bg-dark: #0f172a;        /* Deep slate/navy background */
+    --card-bg: #1e293b;        /* Lighter slate for cards */
+    --brand-blue: #60a5fa;     /* Light blue for title */
+    --text-main: #ffffff;
+    --text-muted: #94a3b8;
+    --app-width: 450px;        /* Restricts the width like a phone app */
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    display: flex;
+    justify-content: center; /* Centers the whole app on large screens */
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* --- Container (This stops boxes from spanning whole screen) --- */
+.app-container {
+    width: 100%;
+    max-width: var(--app-width);
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- Top Navigation --- */
+.top-nav-right {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 20px;
+}
+
+.profile-btn {
+    text-decoration: none;
+    font-size: 1.2rem;
+    background: var(--card-bg);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* --- Header Section --- */
+.home-header {
+    margin-bottom: 35px;
+}
+
+.home-header h1 {
+    color: var(--brand-blue);
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.home-header p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    margin-top: 5px;
+}
+
+/* --- Menu List --- */
+.menu-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.menu-card {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    background: var(--card-bg);
+    padding: 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.menu-card:active {
+    transform: scale(0.97);
+    background: #273549;
+}
+
+/* --- Icon Box Styling --- */
+.icon-box {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0; /* Prevents icon from squishing */
+}
+
+.blue { background: rgba(37, 99, 235, 0.2); color: #60a5fa; border: 1px solid rgba(37, 99, 235, 0.2); }
+.green { background: rgba(22, 163, 74, 0.2); color: #4ade80; border: 1px solid rgba(22, 163, 74, 0.2); }
+.yellow { background: rgba(202, 138, 4, 0.2); color: #facc15; border: 1px solid rgba(202, 138, 4, 0.2); }
+
+/* --- Text Content Inside Cards --- */
+.card-content {
+    margin-left: 16px;
+}
+
+.card-content h3 {
+    color: var(--text-main);
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.card-content p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+/* Resultson Check Load */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.stat-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.stat-item small {
+    display: block;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+}
+
+.stat-item strong {
+    font-size: 1.4rem;
+    color: var(--brand-blue);
+}
+
+.save-btn {
+    margin-top: 20px;
+    background: transparent;
+    border: 1px solid var(--brand-blue);
+    color: var(--brand-blue);
+}
