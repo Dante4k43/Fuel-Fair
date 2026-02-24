@@ -1,8 +1,18 @@
 let map;
-let routeLine; // Leaflet layer handle for the drawn route
+let routeLine;
+
+// Stored after analysis so Save can persist the same values
+let lastComputed = {
+  rate: null,
+  miles: null,
+  mpg: null,
+  fuelPrice: null,
+  fuelCost: null,
+  netRevenue: null,
+  netPerMile: null,
+};
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Init map (default: USA)
   map = L.map('map').setView([39.82, -98.57], 4);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -10,27 +20,22 @@ document.addEventListener('DOMContentLoaded', () => {
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(map);
 
-  // Try to locate user and center the map + fill origin
+  // Center on current location + fill origin (best effort)
   if (!navigator.geolocation) return;
 
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       const { latitude, longitude } = pos.coords;
-
       map.setView([latitude, longitude], 10);
       L.marker([latitude, longitude]).addTo(map);
 
-      // Reverse geocode to fill origin (best effort)
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 6000);
 
         const res = await fetch(
           `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-          {
-            signal: controller.signal,
-            headers: { Accept: 'application/json' },
-          }
+          { signal: controller.signal, headers: { Accept: 'application/json' } }
         );
 
         clearTimeout(timeout);
@@ -46,17 +51,12 @@ document.addEventListener('DOMContentLoaded', () => {
           '';
 
         const state = data?.address?.state || '';
-
-        if (city && state) {
-          document.getElementById('origin').value = `${city}, ${state}`;
-        }
+        if (city && state) document.getElementById('origin').value = `${city}, ${state}`;
       } catch (e) {
         console.log('Location name fetch failed:', e.message);
       }
     },
-    (err) => {
-      console.log('Geolocation failed:', err.message);
-    },
+    (err) => console.log('Geolocation failed:', err.message),
     { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
   );
 });
@@ -66,20 +66,34 @@ async function calculateProfit() {
   const dest = document.getElementById('destination').value.trim();
 
   const rate = parseFloat(document.getElementById('rate').value);
-  const milesInput = document.getElementById('miles');
   const mpg = parseFloat(document.getElementById('mpg').value);
+  const milesInput = document.getElementById('miles');
 
-  // Best-effort: update miles + draw route if origin/dest given
-  if (origin && dest) {
-    await updateRoute(origin, dest);
-  }
+  // 1) Route (best effort). Also returns sampled points.
+  let routeInfo = null;
+  if (origin && dest) routeInfo = await updateRoute(origin, dest);
 
   const miles = parseFloat(milesInput.value) || 0;
 
+  // 2) Get avg diesel price along route (EIA-based)
+  let avgGasPrice = null;
+  if (routeInfo?.samplePoints?.length) {
+    avgGasPrice = await fetchAvgDieselPriceEIA(routeInfo.samplePoints);
+  }
+
+  document.getElementById('avg-gas-price').innerText =
+    typeof avgGasPrice === 'number' ? `$${avgGasPrice.toFixed(2)}` : '$--';
+
+  // 3) Calculate profit using backend — pass fuelPrice so it’s NOT hard-coded
   const response = await fetch('/api/calculate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rate, miles, mpg }),
+    body: JSON.stringify({
+      rate,
+      miles,
+      mpg,
+      fuelPrice: typeof avgGasPrice === 'number' ? avgGasPrice : undefined,
+    }),
   });
 
   const data = await response.json();
@@ -92,6 +106,33 @@ async function calculateProfit() {
   document.getElementById('net-revenue').innerText = `$${Math.round(data.netRevenue)}`;
   document.getElementById('verdict-text').innerText = data.rating;
   document.getElementById('score-circle').style.borderColor = data.color;
+
+  lastComputed = {
+    rate,
+    miles,
+    mpg,
+    fuelPrice: typeof avgGasPrice === 'number' ? avgGasPrice : null,
+    fuelCost: data.fuelCost,
+    netRevenue: data.netRevenue,
+    netPerMile: data.netPerMile,
+  };
+}
+
+async function saveThisLoad() {
+  if (lastComputed.rate == null) return;
+
+  await fetch('/api/save-load', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      rate: lastComputed.rate,
+      miles: lastComputed.miles,
+      fuelCost: lastComputed.fuelCost,
+      netRevenue: lastComputed.netRevenue,
+      netPerMile: lastComputed.netPerMile,
+      avgGasPrice: lastComputed.fuelPrice,
+    }),
+  });
 }
 
 async function geocodeAddress(query) {
@@ -100,7 +141,7 @@ async function geocodeAddress(query) {
   if (!res.ok) throw new Error('geocode failed');
 
   const data = await res.json();
-  if (!data || !data.length) throw new Error('no geocode results');
+  if (!data?.length) throw new Error('no geocode results');
 
   return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
 }
@@ -110,7 +151,6 @@ async function updateRoute(from, to) {
     const a = await geocodeAddress(from);
     const b = await geocodeAddress(to);
 
-    // OSRM expects lon,lat pairs
     const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;
     const res = await fetch(url);
     if (!res.ok) throw new Error('route request failed');
@@ -119,17 +159,48 @@ async function updateRoute(from, to) {
     const route = data?.routes?.[0];
     if (!route) throw new Error('no route found');
 
-    // meters -> miles
     const miles = route.distance * 0.000621371;
     document.getElementById('miles').value = Math.round(miles);
 
-    // Draw route line
     if (routeLine) map.removeLayer(routeLine);
     routeLine = L.geoJSON(route.geometry).addTo(map);
-
     map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+
+    const coords = route.geometry?.coordinates || [];
+    const samplePoints = sampleRoutePoints(coords, 6); // 6 samples to catch region changes
+
+    return { miles, geometry: route.geometry, samplePoints };
   } catch (e) {
     console.log('Routing failed:', e.message);
-    // Never throw — routing should not break calculator
+    return null;
+  }
+}
+
+function sampleRoutePoints(coords, n) {
+  if (!Array.isArray(coords) || coords.length === 0) return [];
+  if (coords.length <= n) return coords.map(([lon, lat]) => ({ lat, lon }));
+
+  const points = [];
+  for (let i = 0; i < n; i++) {
+    const idx = Math.round((i * (coords.length - 1)) / (n - 1));
+    const [lon, lat] = coords[idx];
+    points.push({ lat, lon });
+  }
+  return points;
+}
+
+async function fetchAvgDieselPriceEIA(samplePoints) {
+  try {
+    const res = await fetch('/api/gas/average', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: samplePoints }),
+    });
+    if (!res.ok) throw new Error('gas avg endpoint failed');
+    const data = await res.json();
+    return typeof data?.avgFuelPrice === 'number' ? data.avgFuelPrice : null;
+  } catch (e) {
+    console.log('Avg diesel price failed:', e.message);
+    return null;
   }
 }

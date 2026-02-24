@@ -15,6 +15,9 @@
       <h1>Check Load</h1>
     </header>
 
+    <!-- ✅ Map at TOP (always visible) -->
+    <div id="map-container"><div id="map"></div></div>
+
     <main class="calculator-card">
       <div class="input-group">
         <label>Origin</label>
@@ -46,9 +49,6 @@
       <button id="analyze-btn" class="primary-btn" onclick="calculateProfit()">Analyze Profit</button>
     </main>
 
-    <!-- ✅ Map always visible now (keeps same IDs + styling hooks) -->
-    <div id="map-container"><div id="map"></div></div>
-
     <section id="results-display" class="hidden">
       <div class="verdict-container">
         <div id="score-circle">
@@ -61,6 +61,12 @@
         <div class="stat-item">
           <small>Net $/Mile</small><br />
           <strong id="net-per-mile">$0.00</strong>
+        </div>
+
+        <!-- ✅ NEW -->
+        <div class="stat-item">
+          <small>Avg Gas Price</small><br />
+          <strong id="avg-gas-price">$--</strong>
         </div>
 
         <div class="stat-item">
