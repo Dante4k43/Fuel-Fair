@@ -1,7 +1,6 @@
 let map;
 let routeLine;
 
-// Stored after analysis so Save can persist the same values
 let lastComputed = {
   rate: null,
   miles: null,
@@ -33,10 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 6000);
 
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-          { signal: controller.signal, headers: { Accept: 'application/json' } }
-        );
+        const res = await fetch(`/api/nominatim/reverse?lat=${latitude}&lon=${longitude}`, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
 
         clearTimeout(timeout);
 
@@ -69,22 +68,32 @@ async function calculateProfit() {
   const mpg = parseFloat(document.getElementById('mpg').value);
   const milesInput = document.getElementById('miles');
 
-  // 1) Route (best effort). Also returns sampled points.
+  // Show results section early (so user sees progress)
+  document.getElementById('results-display').classList.remove('hidden');
+
+  // Loading indicator for avg gas
+  const avgGasEl = document.getElementById('avg-gas-price');
+  if (avgGasEl) avgGasEl.innerText = '$...';
+
+  // 1) Route (best effort)
   let routeInfo = null;
   if (origin && dest) routeInfo = await updateRoute(origin, dest);
 
   const miles = parseFloat(milesInput.value) || 0;
 
-  // 2) Get avg diesel price along route (EIA-based)
+  // 2) Avg diesel price (EIA)
   let avgGasPrice = null;
   if (routeInfo?.samplePoints?.length) {
     avgGasPrice = await fetchAvgDieselPriceEIA(routeInfo.samplePoints);
+  } else {
+    console.log('No route samplePoints available; skipping gas average.');
   }
 
-  document.getElementById('avg-gas-price').innerText =
-    typeof avgGasPrice === 'number' ? `$${avgGasPrice.toFixed(2)}` : '$--';
+  if (avgGasEl) {
+    avgGasEl.innerText = typeof avgGasPrice === 'number' ? `$${avgGasPrice.toFixed(2)}` : '$--';
+  }
 
-  // 3) Calculate profit using backend — pass fuelPrice so it’s NOT hard-coded
+  // 3) Profit calc
   const response = await fetch('/api/calculate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -97,8 +106,6 @@ async function calculateProfit() {
   });
 
   const data = await response.json();
-
-  document.getElementById('results-display').classList.remove('hidden');
 
   document.getElementById('score-value').innerText = data.score;
   document.getElementById('net-per-mile').innerText = `$${parseFloat(data.netPerMile).toFixed(2)}`;
@@ -136,7 +143,7 @@ async function saveThisLoad() {
 }
 
 async function geocodeAddress(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+  const url = `/api/nominatim/search?q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error('geocode failed');
 
@@ -167,7 +174,7 @@ async function updateRoute(from, to) {
     map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
 
     const coords = route.geometry?.coordinates || [];
-    const samplePoints = sampleRoutePoints(coords, 6); // 6 samples to catch region changes
+    const samplePoints = sampleRoutePoints(coords, 6);
 
     return { miles, geometry: route.geometry, samplePoints };
   } catch (e) {
@@ -196,9 +203,14 @@ async function fetchAvgDieselPriceEIA(samplePoints) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ points: samplePoints }),
     });
+
     if (!res.ok) throw new Error('gas avg endpoint failed');
     const data = await res.json();
-    return typeof data?.avgFuelPrice === 'number' ? data.avgFuelPrice : null;
+
+    if (typeof data?.avgFuelPrice === 'number') return data.avgFuelPrice;
+
+    console.log('Gas avg returned null:', data);
+    return null;
   } catch (e) {
     console.log('Avg diesel price failed:', e.message);
     return null;

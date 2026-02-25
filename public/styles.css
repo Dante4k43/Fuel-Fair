@@ -80,9 +80,21 @@ input, select {
     font-size: 1rem;
 }
 
-.form-row { display: flex; gap: 10px; }
-.form-row .input-group { flex: 1; }
+.form-row {
+  display: flex;
+  gap: 16px;          /* keep your spacing */
+  flex-wrap: wrap;    /* prevents overflow on small widths */
+}
 
+.form-row .input-group {
+  flex: 1 1 0;        /* equal width columns */
+  min-width: 180px;   /* prevents tiny squishing */
+}
+
+.form-row .input-group input {
+  width: 100%;        /* input fills its column */
+  box-sizing: border-box;
+}
 .primary-btn {
     width: 100%;
     padding: 16px;

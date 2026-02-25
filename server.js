@@ -1,15 +1,119 @@
+/**
+ * Fuel Fair server.js (regenerated)
+ * - Static frontend from /public
+ * - Nominatim proxy endpoints (fix browser CORS)
+ * - Profit calc endpoint
+ * - EIA avg diesel endpoint (API v2 /seriesid)
+ * - Save load endpoint
+ *
+ * ENV:
+ * - EIA_API_KEY (required for /api/gas/average)
+ * - DATABASE_URL (used in db.js)
+ * - NOMINATIM_UA (optional; recommended)
+ */
+
 const express = require('express');
 const app = express();
-const port = 3000;
+const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+
 const pool = require('./db');
 
 app.use(express.json());
 app.use(express.static('public'));
 
-/**
- * Profit Engine
- * fuelPrice is optional — if provided, it overrides the default.
- */
+const NOMINATIM_UA =
+  process.env.NOMINATIM_UA ||
+  'Fuel-Fair/1.0 (https://github.com/Dante4k43/Fuel-Fair; contact: dantecaraballo01@gmail.com)';
+
+async function fetchWithTimeout(url, options = {}, ms = 8000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+app.get('/api/nominatim/reverse', async (req, res) => {
+  try {
+    const { lat, lon } = req.query;
+    if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required' });
+
+    const url =
+      `https://nominatim.openstreetmap.org/reverse` +
+      `?format=json&addressdetails=1&zoom=10` +
+      `&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+
+    const r = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': NOMINATIM_UA,
+          'Referer': 'http://localhost:3000/',
+        },
+      },
+      8000
+    );
+
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      return res.status(502).json({
+        error: 'nominatim reverse failed',
+        upstreamStatus: r.status,
+        upstreamBody: text.slice(0, 300),
+      });
+    }
+
+    const data = await r.json();
+    return res.json(data);
+  } catch (e) {
+    return res.status(502).json({ error: 'nominatim reverse exception', message: e.message });
+  }
+});
+
+app.get('/api/nominatim/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ error: 'q required' });
+
+    const url =
+      `https://nominatim.openstreetmap.org/search` +
+      `?format=json&limit=1&addressdetails=1` +
+      `&q=${encodeURIComponent(q)}`;
+
+    const r = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': NOMINATIM_UA,
+          'Referer': 'http://localhost:3000/',
+        },
+      },
+      8000
+    );
+
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      return res.status(502).json({
+        error: 'nominatim search failed',
+        upstreamStatus: r.status,
+        upstreamBody: text.slice(0, 300),
+      });
+    }
+
+    const data = await r.json();
+    return res.json(data);
+  } catch (e) {
+    return res.status(502).json({ error: 'nominatim search exception', message: e.message });
+  }
+});
+
+/* ------------------------------- Calculator ------------------------------- */
+
 app.post('/api/calculate', (req, res) => {
   const { rate, miles, mpg, fuelPrice = 4.15 } = req.body;
 
@@ -31,15 +135,8 @@ app.post('/api/calculate', (req, res) => {
   res.json({ fuelCost, netRevenue, netPerMile, rating, score, color, fuelPriceUsed: safeFuelPrice });
 });
 
-/**
- * FREE Avg Diesel Price (EIA) along route:
- * 1) reverse geocode sample points -> state code
- * 2) map state -> EIA diesel region series
- * 3) fetch latest weekly price for each region series from EIA
- * 4) average them
- *
- * Requires: EIA_API_KEY (free key)
- */
+/* ---------------------------- EIA Avg Diesel API --------------------------- */
+
 app.post('/api/gas/average', async (req, res) => {
   const { points = [] } = req.body;
   const apiKey = process.env.EIA_API_KEY;
@@ -52,7 +149,6 @@ app.post('/api/gas/average', async (req, res) => {
   if (sliced.length === 0) return res.json({ avgFuelPrice: null, samples: [] });
 
   try {
-    // 1) states from sample points
     const stateCodes = [];
     for (const p of sliced) {
       const lat = Number(p.lat);
@@ -64,17 +160,13 @@ app.post('/api/gas/average', async (req, res) => {
     }
 
     const uniqueStates = [...new Set(stateCodes)];
-    if (uniqueStates.length === 0) return res.json({ avgFuelPrice: null, samples: [] });
+    if (uniqueStates.length === 0) {
+      return res.json({ avgFuelPrice: null, samples: [], debug: { stateCodes, uniqueStates } });
+    }
 
-    // 2) state -> series
-    const seriesIds = uniqueStates
-      .map(stateToEiaDieselSeriesId)
-      .filter(Boolean);
-
+    const seriesIds = uniqueStates.map(stateToEiaDieselSeriesId).filter(Boolean);
     const uniqueSeriesIds = [...new Set(seriesIds)];
-    if (uniqueSeriesIds.length === 0) return res.json({ avgFuelPrice: null, samples: [] });
 
-    // 3) fetch latest price per series
     const samples = [];
     for (const sid of uniqueSeriesIds) {
       const price = await getLatestEiaSeriesValue(apiKey, sid);
@@ -82,35 +174,19 @@ app.post('/api/gas/average', async (req, res) => {
     }
 
     const prices = samples.map(s => s.price).filter(Number.isFinite);
-   if (prices.length === 0) {
-      return res.json({
-        avgFuelPrice: null,
-        samples,
-        debug: {
-          stateCodes,
-          uniqueStates,
-          seriesIds,
-          uniqueSeriesIds
-        }
-      });
+    if (prices.length === 0) {
+      return res.json({ avgFuelPrice: null, samples, debug: { stateCodes, uniqueStates, seriesIds, uniqueSeriesIds } });
     }
 
-
     const avgFuelPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-
-    return res.json({
-      avgFuelPrice,
-      states: uniqueStates,
-      samples
-    });
+    return res.json({ avgFuelPrice, states: uniqueStates, samples });
   } catch (err) {
     return res.status(200).json({ avgFuelPrice: null, error: err.message });
   }
 });
 
-// ---------- EIA helpers ----------
+/* ------------------------------- EIA Helpers ------------------------------ */
 
-// Simple in-memory cache to reduce EIA calls (6 hours)
 const eiaCache = new Map(); // seriesId -> { value, ts }
 
 async function getLatestEiaSeriesValue(apiKey, seriesId) {
@@ -118,53 +194,45 @@ async function getLatestEiaSeriesValue(apiKey, seriesId) {
   const now = Date.now();
   if (cached && (now - cached.ts) < 6 * 60 * 60 * 1000) return cached.value;
 
-  // ✅ APIv2 backward-compat route for v1 series IDs:
-  // https://api.eia.gov/v2/seriesid/APIv1-SERIESID-HERE?api_key=KEY
   const url = `https://api.eia.gov/v2/seriesid/${encodeURIComponent(seriesId)}?api_key=${encodeURIComponent(apiKey)}`;
-
   const r = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!r.ok) return NaN;
 
   const data = await r.json();
-
-  // v2 response includes a data array with "value"
-  // We'll take the first row (latest) if present.
   const latest = data?.response?.data?.[0];
   const value = latest ? Number(latest.value) : NaN;
 
   if (Number.isFinite(value)) eiaCache.set(seriesId, { value, ts: now });
   return value;
 }
-async function reverseGeocodeStateCode(lat, lon) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
-  const r = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'Fuel-Fair/1.0 (diesel avg)'
-    }
-  });
 
+async function reverseGeocodeStateCode(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=5&lat=${lat}&lon=${lon}`;
+  const r = await fetch(url, {
+    headers: { Accept: 'application/json', 'User-Agent': NOMINATIM_UA }
+  });
   if (!r.ok) return null;
 
   const data = await r.json();
   const addr = data?.address || {};
 
-  // 1) Best case
   if (typeof addr.state_code === 'string' && addr.state_code.length === 2) {
     return addr.state_code.toUpperCase();
   }
 
-  // 2) Common Nominatim field: "ISO3166-2-lvl4": "US-CA"
   const iso = addr['ISO3166-2-lvl4'];
   if (typeof iso === 'string' && iso.startsWith('US-') && iso.length === 5) {
     return iso.slice(3).toUpperCase();
   }
 
-  // 3) Fallback: map full state name to abbreviation
-  const stateName = typeof addr.state === 'string' ? addr.state.trim() : '';
-  if (stateName) {
-    const abbr = US_STATE_NAME_TO_ABBR[stateName.toLowerCase()];
-    if (abbr) return abbr;
+  const rawState = typeof addr.state === 'string' ? addr.state.trim() : '';
+  if (rawState) {
+    const normalized = rawState.toLowerCase().replace(/^state of\s+/, '').replace(/^commonwealth of\s+/, '').trim();
+    const exact = US_STATE_NAME_TO_ABBR[normalized];
+    if (exact) return exact;
+    for (const [name, abbr] of Object.entries(US_STATE_NAME_TO_ABBR)) {
+      if (normalized.includes(name)) return abbr;
+    }
   }
 
   return null;
@@ -182,36 +250,23 @@ const US_STATE_NAME_TO_ABBR = {
   "west virginia":"WV","wisconsin":"WI","wyoming":"WY","district of columbia":"DC"
 };
 
-/**
- * Region mapping (free + stable):
- * We map states to EIA’s diesel pricing regions (PADD subregions / regions),
- * plus special handling for CA and "West Coast excluding CA".
- *
- * Series IDs used are published by EIA (example list includes SCA and R5XCA). :contentReference[oaicite:2]{index=2}
- */
 function stateToEiaDieselSeriesId(stateCode) {
   const s = (stateCode || '').toUpperCase();
 
-  // Special
   if (s === 'CA') return 'PET.EMD_EPD2D_PTE_SCA_DPG.W';
 
-  // West Coast excluding CA
   const westNoCA = new Set(['AK','AZ','HI','NV','OR','WA']);
   if (westNoCA.has(s)) return 'PET.EMD_EPD2D_PTE_R5XCA_DPG.W';
 
-  // Rocky Mountain (R40)
   const rocky = new Set(['CO','ID','MT','UT','WY','NM']);
   if (rocky.has(s)) return 'PET.EMD_EPD2D_PTE_R40_DPG.W';
 
-  // Gulf Coast (R30)
   const gulf = new Set(['AL','AR','LA','MS','OK','TX']);
   if (gulf.has(s)) return 'PET.EMD_EPD2D_PTE_R30_DPG.W';
 
-  // Midwest (R20)
   const midwest = new Set(['IL','IN','IA','KS','KY','MI','MN','MO','NE','ND','OH','SD','TN','WI']);
   if (midwest.has(s)) return 'PET.EMD_EPD2D_PTE_R20_DPG.W';
 
-  // East Coast split
   const newEngland = new Set(['CT','ME','MA','NH','RI','VT']);
   if (newEngland.has(s)) return 'PET.EMD_EPD2D_PTE_R1X_DPG.W';
 
@@ -221,11 +276,11 @@ function stateToEiaDieselSeriesId(stateCode) {
   const lowerAtlantic = new Set(['FL','GA','NC','SC','VA','WV']);
   if (lowerAtlantic.has(s)) return 'PET.EMD_EPD2D_PTE_R1Z_DPG.W';
 
-  // Fallback to U.S. average
   return 'PET.EMD_EPD2D_PTE_NUS_DPG.W';
 }
 
-// --- Save a load ---
+/* ------------------------------- Save a Load ------------------------------ */
+
 app.post('/api/save-load', async (req, res) => {
   const { rate, miles, fuelCost, netRevenue, netPerMile, avgGasPrice } = req.body;
 
