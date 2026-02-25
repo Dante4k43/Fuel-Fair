@@ -32,7 +32,11 @@ const initDb = async () => {
     // ✅ Add new fields without wiping data
     await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS avg_gas_price NUMERIC;`);
     await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS fuel_price NUMERIC;`);
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS decision VARCHAR(20);`);
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS origin TEXT;`);
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS destination TEXT;`);    
 
+    
     console.log('🐘 Database ready (safe init + migrations applied)');
   } catch (err) {
     console.error('DB Init Error:', err);

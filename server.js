@@ -282,26 +282,51 @@ function stateToEiaDieselSeriesId(stateCode) {
 /* ------------------------------- Save a Load ------------------------------ */
 
 app.post('/api/save-load', async (req, res) => {
-  const { rate, miles, fuelCost, netRevenue, netPerMile, avgGasPrice } = req.body;
+  const {
+    decision,
+    origin,
+    destination,
+    rate,
+    miles,
+    fuelCost,
+    netRevenue,
+    netPerMile,
+    avgGasPrice
+  } = req.body || {};
 
   try {
-    await pool.query(
-      `INSERT INTO loads (rate, miles, fuel_cost, net_profit, net_per_mile, avg_gas_price, fuel_price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    const result = await pool.query(
+      `
+      INSERT INTO loads
+        (decision, origin, destination,
+         rate, miles,
+         fuel_cost, net_profit, net_per_mile,
+         avg_gas_price, fuel_price)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING id, created_at
+      `,
       [
-        Number(rate) || 0,
-        Number(miles) || 0,
-        Number(fuelCost) || 0,
-        Number(netRevenue) || 0,
-        Number(netPerMile) || 0,
+        decision ?? null,
+        origin ?? null,
+        destination ?? null,
+        rate == null ? null : Number(rate),
+        miles == null ? null : Number(miles),
+        fuelCost == null ? null : Number(fuelCost),
+        netRevenue == null ? null : Number(netRevenue),
+        netPerMile == null ? null : Number(netPerMile),
         avgGasPrice == null ? null : Number(avgGasPrice),
-        avgGasPrice == null ? null : Number(avgGasPrice),
+        avgGasPrice == null ? null : Number(avgGasPrice), // fuel_price mirrors avg diesel
       ]
     );
 
-    res.json({ success: true });
+    return res.json({ success: true, ...result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('SAVE LOAD ERROR:', err); // <-- this WILL show in docker logs
+    return res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
