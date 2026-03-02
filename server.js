@@ -1,18 +1,25 @@
 /**
- * Fuel Fair server.js (regenerated)
+ * Fuel Fair server.js
  * - Static frontend from /public
  * - Nominatim proxy endpoints (fix browser CORS)
+ * - OSRM proxy endpoint (fix browser CORS)
  * - Profit calc endpoint
  * - EIA avg diesel endpoint (API v2 /seriesid)
- * - Save load endpoint
+ * - Auth (sessions + signup/signin/me/change-password)
+ * - Save load + Loads list (NOW protected: login required)
  *
  * ENV:
  * - EIA_API_KEY (required for /api/gas/average)
  * - DATABASE_URL (used in db.js)
  * - NOMINATIM_UA (optional; recommended)
+ * - SESSION_SECRET (required in production)
  */
 
 const express = require('express');
+const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
+const bcrypt = require('bcrypt');
+
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 
@@ -20,6 +27,32 @@ const pool = require('./db');
 
 app.use(express.json());
 app.use(express.static('public'));
+
+app.set('trust proxy', 1);
+
+app.use(
+  session({
+    store: new pgSession({
+      pool,
+      tableName: 'user_sessions',
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 1000 * 60 * 60 * 24 * 14, // 14 days
+    },
+  })
+);
+
+function requireAuth(req, res, next) {
+  if (!req.session?.userId) return res.status(401).json({ error: 'not_authenticated' });
+  next();
+}
 
 const NOMINATIM_UA =
   process.env.NOMINATIM_UA ||
@@ -35,6 +68,53 @@ async function fetchWithTimeout(url, options = {}, ms = 8000) {
     clearTimeout(t);
   }
 }
+
+/* ------------------------------- OSRM Proxy ------------------------------- */
+
+app.get('/api/osrm/route', async (req, res) => {
+  try {
+    const { fromLon, fromLat, toLon, toLat } = req.query;
+
+    if (![fromLon, fromLat, toLon, toLat].every(v => v != null)) {
+      return res.status(400).json({ error: 'fromLon, fromLat, toLon, toLat required' });
+    }
+
+    const simple = req.query.simple === '1';
+
+    const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${encodeURIComponent(fromLon)},${encodeURIComponent(fromLat)};` +
+    `${encodeURIComponent(toLon)},${encodeURIComponent(toLat)}` +
+    (simple
+      ? `?overview=false&steps=false&annotations=false`
+      : `?overview=full&geometries=geojson`);
+
+    const r = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 30000);
+
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      return res.status(502).json({
+        error: 'osrm route failed',
+        upstreamStatus: r.status,
+        upstreamBody: text.slice(0, 300),
+      });
+    }
+
+    const data = await r.json();
+    return res.json(data);
+  } catch (e) {
+  const msg = String(e?.message || e);
+  if (msg.toLowerCase().includes('aborted')) {
+    return res.status(504).json({
+      error: 'osrm route timeout',
+      message: 'OSRM took too long (increase timeout or try again).',
+    });
+  }
+  return res.status(502).json({ error: 'osrm route exception', message: msg });
+}
+});
+
+/* ----------------------------- Nominatim Proxy ---------------------------- */
 
 app.get('/api/nominatim/reverse', async (req, res) => {
   try {
@@ -52,7 +132,7 @@ app.get('/api/nominatim/reverse', async (req, res) => {
         headers: {
           Accept: 'application/json',
           'User-Agent': NOMINATIM_UA,
-          'Referer': 'http://localhost:3000/',
+          Referer: 'http://localhost:3000/',
         },
       },
       8000
@@ -90,7 +170,7 @@ app.get('/api/nominatim/search', async (req, res) => {
         headers: {
           Accept: 'application/json',
           'User-Agent': NOMINATIM_UA,
-          'Referer': 'http://localhost:3000/',
+          Referer: 'http://localhost:3000/',
         },
       },
       8000
@@ -279,9 +359,93 @@ function stateToEiaDieselSeriesId(stateCode) {
   return 'PET.EMD_EPD2D_PTE_NUS_DPG.W';
 }
 
-/* ------------------------------- Save a Load ------------------------------ */
+/* ------------------------------- Auth Routes ------------------------------ */
 
-app.post('/api/save-load', async (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const email = (req.body?.email || '').trim().toLowerCase();
+    const password = req.body?.password || '';
+
+    if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
+    if (password.length < 8) return res.status(400).json({ error: 'password_too_short' });
+
+    const hash = await bcrypt.hash(password, 12);
+
+    const result = await pool.query(
+      `INSERT INTO users (email, password_hash)
+       VALUES ($1, $2)
+       RETURNING id, email`,
+      [email, hash]
+    );
+
+    req.session.userId = result.rows[0].id;
+    return res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    if (String(err.message).toLowerCase().includes('duplicate')) {
+      return res.status(409).json({ error: 'email_already_exists' });
+    }
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/signin', async (req, res) => {
+  try {
+    const email = (req.body?.email || '').trim().toLowerCase();
+    const password = req.body?.password || '';
+
+    const userRes = await pool.query(
+      `SELECT id, email, password_hash FROM users WHERE LOWER(email)=LOWER($1)`,
+      [email]
+    );
+
+    const user = userRes.rows[0];
+    if (!user) return res.status(401).json({ error: 'invalid_credentials' });
+
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+
+    req.session.userId = user.id;
+    return res.json({ success: true, user: { id: user.id, email: user.email } });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/signout', (req, res) => {
+  req.session.destroy(() => res.json({ success: true }));
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  if (!req.session?.userId) return res.json({ user: null });
+
+  const r = await pool.query(`SELECT id, email, created_at FROM users WHERE id=$1`, [req.session.userId]);
+  return res.json({ user: r.rows[0] || null });
+});
+
+app.post('/api/auth/change-password', requireAuth, async (req, res) => {
+  try {
+    const currentPassword = req.body?.currentPassword || '';
+    const newPassword = req.body?.newPassword || '';
+
+    if (newPassword.length < 8) return res.status(400).json({ error: 'password_too_short' });
+
+    const r = await pool.query(`SELECT password_hash FROM users WHERE id=$1`, [req.session.userId]);
+    const ok = await bcrypt.compare(currentPassword, r.rows[0]?.password_hash || '');
+    if (!ok) return res.status(401).json({ error: 'wrong_password' });
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await pool.query(`UPDATE users SET password_hash=$1 WHERE id=$2`, [newHash, req.session.userId]);
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ------------------------------ Save a Load ------------------------------- */
+/* ✅ NOW requires login */
+
+app.post('/api/save-load', requireAuth, async (req, res) => {
   const {
     decision,
     origin,
@@ -322,11 +486,56 @@ app.post('/api/save-load', async (req, res) => {
 
     return res.json({ success: true, ...result.rows[0] });
   } catch (err) {
-    console.error('SAVE LOAD ERROR:', err); // <-- this WILL show in docker logs
+    console.error('SAVE LOAD ERROR:', err);
     return res.status(500).json({
       success: false,
       error: err.message
     });
+  }
+});
+
+/* ------------------------------ Loads Listing ----------------------------- */
+/* ✅ NOW requires login */
+
+app.get('/api/loads', requireAuth, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 8, 50);
+    const offset = (page - 1) * limit;
+
+    const totalResult = await pool.query(`SELECT COUNT(*) FROM loads`);
+    const total = Number(totalResult.rows[0].count);
+
+    const result = await pool.query(
+      `
+      SELECT id,
+             decision,
+             origin,
+             destination,
+             rate,
+             miles,
+             fuel_cost,
+             net_profit,
+             net_per_mile,
+             avg_gas_price,
+             created_at
+      FROM loads
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+      `,
+      [limit, offset]
+    );
+
+    res.json({
+      data: result.rows,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
+
+  } catch (err) {
+    console.error('GET LOADS ERROR:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

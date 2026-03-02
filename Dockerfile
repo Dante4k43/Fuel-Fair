@@ -2,6 +2,9 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+RUN apk add --no-cache ca-certificates
+
+
 # Copy the manifest we just created
 COPY package.json ./
 

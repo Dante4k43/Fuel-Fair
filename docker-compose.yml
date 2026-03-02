@@ -9,6 +9,10 @@ services:
       - .env
     depends_on:
       - db
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
 
   db:
     image: postgres:15

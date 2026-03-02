@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign In / Sign Up</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-container">
+
+    <a href="index.html" style="color: var(--brand-blue); text-decoration: none; float: left;">← Home</a>
+
+    <div class="home-header" style="margin-top: 20px;">
+      <h1>Welcome</h1>
+      <p>Sign in to save loads and access your account.</p>
+    </div>
+
+    <div class="card menu-card rectangle auth-card">
+
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <button id="tab-signin" class="save-btn active-tab">Sign In</button>
+        <button id="tab-signup" class="save-btn">Sign Up</button>
+      </div>
+
+      <div id="msg" class="auth-message"></div>
+
+      <form id="auth-form" class="auth-form">
+
+        <label>Email</label>
+        <input id="email" type="email" required autocomplete="email" />
+
+        <label>Password</label>
+        <input id="password" type="password" required autocomplete="current-password" />
+
+        <div id="confirm-wrap" class="confirm-wrap">
+          <label>Confirm Password</label>
+          <input id="confirm" type="password" autocomplete="new-password" />
+        </div>
+
+        <button id="submit-btn" type="submit" class="primary-btn auth-submit">
+          Sign In
+        </button>
+
+        <div class="auth-switch">
+          <span id="switch-text">Don’t have an account?</span>
+          <a href="#" id="switch-link">Sign up</a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+</body>
+</html>

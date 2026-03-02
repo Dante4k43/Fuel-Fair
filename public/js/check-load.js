@@ -1,6 +1,9 @@
 let map;
 let routeLine;
 
+// Toggle this ON later when auth.html exists and you're ready to enforce signup.
+const ENABLE_SIGNUP_GATE = true;
+
 // Stored after analysis so Accept/Reject can persist the same values
 let lastComputed = {
   rate: null,
@@ -23,6 +26,38 @@ function debounce(fn, ms = 900) {
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/*                               AUTH + GATING                                */
+/* -------------------------------------------------------------------------- */
+
+async function getMe() {
+  try {
+    const res = await fetch('/api/auth/me', { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+function getAnalyzeCount() {
+  return Number(localStorage.getItem('analyzeCount') || '0');
+}
+
+function setAnalyzeCount(n) {
+  localStorage.setItem('analyzeCount', String(n));
+}
+
+function redirectToAuth() {
+  const returnUrl = encodeURIComponent('/check-load.html');
+  window.location.href = `/auth.html?returnUrl=${returnUrl}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               DOM READY                                    */
+/* -------------------------------------------------------------------------- */
+
 document.addEventListener('DOMContentLoaded', () => {
   map = L.map('map').setView([39.82, -98.57], 4);
 
@@ -39,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ✅ Auto-update ONLY miles + route (no diesel/profit) as user edits origin/destination
+  // ✅ Auto-update ONLY miles + route as user edits origin/destination
   const debouncedMilesOnly = debounce(() => autoUpdateMilesOnly(), 900);
   const originEl = document.getElementById('origin');
   const destEl = document.getElementById('destination');
@@ -77,7 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (city && state && originEl && !originEl.value.trim()) {
           originEl.value = `${city}, ${state}`;
-          // optional: trigger miles-only update if destination already filled
           autoUpdateMilesOnly();
         }
       } catch (e) {
@@ -88,6 +122,43 @@ document.addEventListener('DOMContentLoaded', () => {
     { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
   );
 });
+
+/* -------------------------------------------------------------------------- */
+/*                            RESULTS UI (LOADING)                             */
+/* -------------------------------------------------------------------------- */
+
+function resetResultsUI() {
+  const scoreValue = document.getElementById('score-value');
+  const verdictText = document.getElementById('verdict-text');
+  const scoreCircle = document.getElementById('score-circle');
+
+  if (scoreValue) scoreValue.innerText = '--';
+  if (verdictText) verdictText.innerText = 'Analyzing...';
+  if (scoreCircle) scoreCircle.style.borderColor = 'transparent';
+
+  const netPerMile = document.getElementById('net-per-mile');
+  const avgGas = document.getElementById('avg-gas-price');
+  const fuelCost = document.getElementById('total-fuel-cost');
+  const netRevenue = document.getElementById('net-revenue');
+
+  if (netPerMile) netPerMile.innerText = '$--';
+  if (avgGas) avgGas.innerText = '$--';
+  if (fuelCost) fuelCost.innerText = '$--';
+  if (netRevenue) netRevenue.innerText = '$--';
+}
+
+function setResultsVisibleDuringAnalyze(isAnalyzing) {
+  const statsGrid = document.querySelector('#results-display .stats-grid');
+  const decisionRow = document.querySelector('#results-display .form-row');
+
+  if (isAnalyzing) {
+    statsGrid?.classList.add('hidden');
+    decisionRow?.classList.add('hidden');
+  } else {
+    statsGrid?.classList.remove('hidden');
+    decisionRow?.classList.remove('hidden');
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*                            AUTO MILES (NO ANALYSIS)                        */
@@ -102,15 +173,13 @@ async function autoUpdateMilesOnly() {
 
   isAutoUpdating = true;
   try {
-    const routeInfo = await updateRoute(origin, dest);
+    // ✅ miles-only routing (fast, no geometry)
+    const routeInfo = await updateRoute(origin, dest, { simple: true, draw: false });
 
     if (routeInfo?.miles && !userEditedMiles) {
       const milesEl = document.getElementById('miles');
       if (milesEl) milesEl.value = Math.round(routeInfo.miles);
     }
-
-    // IMPORTANT: do NOT fetch diesel here
-    // IMPORTANT: do NOT run profit calc here
   } catch (e) {
     console.log('Auto miles update failed:', e.message);
   } finally {
@@ -123,39 +192,78 @@ async function autoUpdateMilesOnly() {
 /* -------------------------------------------------------------------------- */
 
 async function calculateProfit() {
-  const origin = document.getElementById('origin')?.value?.trim() || '';
-  const dest = document.getElementById('destination')?.value?.trim() || '';
+  // ✅ Keep `me` in scope (fixes ReferenceError)
+  let me = null;
 
-  // Show results area (so user sees progress)
-  document.getElementById('results-display')?.classList.remove('hidden');
-
-  // Ensure route/miles up-to-date at analyze time
-  let routeInfo = null;
-  if (origin && dest) {
-    routeInfo = await updateRoute(origin, dest);
-
-    if (routeInfo?.miles && !userEditedMiles) {
-      const milesEl = document.getElementById('miles');
-      if (milesEl) milesEl.value = Math.round(routeInfo.miles);
+  // ✅ Force signup after 3 analyzes (only when gate enabled)
+  if (ENABLE_SIGNUP_GATE) {
+    me = await getMe();
+    if (!me) {
+      const count = getAnalyzeCount();
+      if (count >= 3) {
+        redirectToAuth();
+        return;
+      }
     }
   }
 
-  // Fetch avg diesel ONLY on analyze
-  const avgGasEl = document.getElementById('avg-gas-price');
-  if (avgGasEl) avgGasEl.innerText = '$...';
+  const analyzeBtn = document.getElementById('analyze-btn');
+  const verdictText = document.getElementById('verdict-text');
 
-  let avgGasPrice = null;
-  if (routeInfo?.samplePoints?.length) {
-    avgGasPrice = await fetchAvgDieselPriceEIA(routeInfo.samplePoints);
+  analyzeBtn.disabled = true;
+  analyzeBtn.innerText = 'Analyzing...';
+
+  document.getElementById('results-display')?.classList.remove('hidden');
+  resetResultsUI();
+  setResultsVisibleDuringAnalyze(true);
+
+  const origin = document.getElementById('origin')?.value?.trim() || '';
+  const dest = document.getElementById('destination')?.value?.trim() || '';
+
+  let routeInfo = null;
+
+  try {
+    // Full routing on analyze (for sample points + optional drawing)
+    if (origin && dest) {
+      routeInfo = await updateRoute(origin, dest, { simple: false, draw: true });
+
+      if (routeInfo?.miles && !userEditedMiles) {
+        const milesEl = document.getElementById('miles');
+        if (milesEl) milesEl.value = Math.round(routeInfo.miles);
+      }
+    }
+
+    // Avg diesel ONLY on analyze
+    const avgGasEl = document.getElementById('avg-gas-price');
+    if (avgGasEl) avgGasEl.innerText = '$...';
+
+    let avgGasPrice = null;
+    if (routeInfo?.samplePoints?.length) {
+      avgGasPrice = await fetchAvgDieselPriceEIA(routeInfo.samplePoints);
+    }
+
+    if (avgGasEl) {
+      avgGasEl.innerText =
+        typeof avgGasPrice === 'number' ? `$${avgGasPrice.toFixed(2)}` : '$--';
+    }
+
+    // Profit calc (uses avg diesel if available)
+    await calculateProfitInternal(avgGasPrice, true);
+
+    // Count analyzes only when gate enabled AND user is logged out
+    if (ENABLE_SIGNUP_GATE && !me) {
+      setAnalyzeCount(getAnalyzeCount() + 1);
+    }
+
+    setResultsVisibleDuringAnalyze(false);
+  } catch (err) {
+    console.error('Analyze error:', err);
+    verdictText.innerText = 'Error analyzing load';
+    setResultsVisibleDuringAnalyze(false);
+  } finally {
+    analyzeBtn.disabled = false;
+    analyzeBtn.innerText = 'Analyze Profit';
   }
-
-  if (avgGasEl) {
-    avgGasEl.innerText =
-      typeof avgGasPrice === 'number' ? `$${avgGasPrice.toFixed(2)}` : '$--';
-  }
-
-  // Run profit calc (uses avg diesel if available)
-  await calculateProfitInternal(avgGasPrice, true);
 }
 
 async function calculateProfitInternal(forcedGasPrice = null, showResults = true) {
@@ -201,13 +309,12 @@ async function calculateProfitInternal(forcedGasPrice = null, showResults = true
 /* -------------------------------------------------------------------------- */
 
 async function submitDecision(decision) {
-  // decision: "accepted" | "rejected"
   if (lastComputed.rate == null) return;
 
   const origin = document.getElementById('origin')?.value || null;
   const destination = document.getElementById('destination')?.value || null;
 
-  await fetch('/api/save-load', {
+  const res = await fetch('/api/save-load', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -222,6 +329,11 @@ async function submitDecision(decision) {
       avgGasPrice: lastComputed.fuelPrice,
     }),
   });
+
+  if (res.status === 401) {
+    const returnUrl = encodeURIComponent('/check-load.html');
+    window.location.href = `/auth.html?returnUrl=${returnUrl}`;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -239,13 +351,22 @@ async function geocodeAddress(query) {
   return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
 }
 
-async function updateRoute(from, to) {
+/**
+ * updateRoute(from, to, { simple, draw })
+ * - simple=true  => fast miles-only (requires server to support simple=1)
+ * - simple=false => full geometry for sampling + drawing
+ * - draw=false   => don't draw route line / fit bounds (for auto-miles)
+ */
+async function updateRoute(from, to, { simple = false, draw = true } = {}) {
   try {
     const a = await geocodeAddress(from);
     const b = await geocodeAddress(to);
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;
-    const res = await fetch(url);
+    const url =
+      `/api/osrm/route?fromLon=${a.lon}&fromLat=${a.lat}&toLon=${b.lon}&toLat=${b.lat}` +
+      `&simple=${simple ? '1' : '0'}`;
+
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error('route request failed');
 
     const data = await res.json();
@@ -254,12 +375,18 @@ async function updateRoute(from, to) {
 
     const miles = route.distance * 0.000621371;
 
-    if (routeLine) map.removeLayer(routeLine);
-    routeLine = L.geoJSON(route.geometry).addTo(map);
-    map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+    let samplePoints = [];
+    // Only sample if geometry exists (simple mode won't have it)
+    if (!simple && route.geometry?.coordinates?.length) {
+      const coords = route.geometry.coordinates;
+      samplePoints = sampleRoutePoints(coords, 6);
 
-    const coords = route.geometry?.coordinates || [];
-    const samplePoints = sampleRoutePoints(coords, 6);
+      if (draw) {
+        if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.geoJSON(route.geometry).addTo(map);
+        map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+      }
+    }
 
     return { miles, samplePoints };
   } catch (e) {
