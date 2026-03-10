@@ -53,11 +53,11 @@ async function loadSavedLoads(page = 1) {
 
         <div class="load-grid">
             <div>Miles: <strong>${formatNumber(load.miles)}</strong></div>
-            <div>Rate: <strong>${formatMoney(load.rate)}</strong></div>
+            <div>Gross Pay: <strong>${formatMoney(load.rate)}</strong></div>
             <div>Fuel Cost: <strong>${formatMoney(load.fuel_cost)}</strong></div>
             <div>Profit: <strong>${formatMoney(load.net_profit)}</strong></div>
             <div>$/Mile: <strong>${formatMoney(load.net_per_mile)}</strong></div>
-            <div>Avg Diesel: <strong>${formatMoney(load.avg_gas_price)}</strong></div>
+            <div>Avg Fuel Price: <strong>${formatMoney(load.avg_gas_price)}</strong></div>
         </div>
 
         <div class="load-date">

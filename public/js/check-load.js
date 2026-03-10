@@ -13,10 +13,15 @@ let lastComputed = {
   fuelCost: null,
   netRevenue: null,
   netPerMile: null,
+  score: null,
+  rating: null,
 };
 
 let isAutoUpdating = false;
 let userEditedMiles = false;
+
+// Preferences (loaded if logged in)
+let userPrefs = null;
 
 function debounce(fn, ms = 900) {
   let t;
@@ -54,6 +59,32 @@ function redirectToAuth() {
   window.location.href = `/auth.html?returnUrl=${returnUrl}`;
 }
 
+async function loadPreferencesIfLoggedIn() {
+  try {
+    const me = await getMe();
+    if (!me) return;
+
+    const res = await fetch('/api/preferences', { headers: { Accept: 'application/json' } });
+    if (!res.ok) return;
+
+    userPrefs = await res.json().catch(() => null);
+
+    // auto-fill MPG if empty (don’t overwrite user input)
+    const mpgEl = document.getElementById('mpg');
+    if (mpgEl) {
+      const current = Number(mpgEl.value);
+      const hasValid = Number.isFinite(current) && current > 0;
+      const prefMpg = Number(userPrefs?.default_mpg);
+
+      if (!hasValid && Number.isFinite(prefMpg) && prefMpg > 0) {
+        mpgEl.value = String(prefMpg);
+      }
+    }
+  } catch (e) {
+    console.log('Pref load failed:', e?.message || e);
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               DOM READY                                    */
 /* -------------------------------------------------------------------------- */
@@ -65,6 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(map);
+
+  // load prefs (best-effort)
+  loadPreferencesIfLoggedIn();
 
   // Track manual miles edits so we don’t overwrite them
   const milesEl = document.getElementById('miles');
@@ -127,7 +161,57 @@ document.addEventListener('DOMContentLoaded', () => {
 /*                            RESULTS UI (LOADING)                             */
 /* -------------------------------------------------------------------------- */
 
+function updateAnalyzeButtonState() {
+  const origin = document.getElementById('origin')?.value.trim();
+  const destination = document.getElementById('destination')?.value.trim();
+  const rate = document.getElementById('rate')?.value.trim();
+  const mpg = document.getElementById('mpg')?.value.trim();
+
+  const analyzeBtn = document.getElementById('analyze-btn');
+
+  if (!analyzeBtn) return;
+
+  const isValid = origin && destination && rate && mpg;
+
+  analyzeBtn.disabled = !isValid;
+}
+
+function removeScoreWarning() {
+  const existing = document.getElementById('score-threshold-warning');
+  if (existing) existing.remove();
+}
+
+function showScoreWarningIfNeeded(score) {
+  removeScoreWarning();
+
+  const threshold = Number(userPrefs?.fair_load_score_threshold);
+  if (!Number.isFinite(threshold)) return;
+  if (!Number.isFinite(Number(score))) return;
+
+  if (Number(score) >= threshold) return;
+
+  const results = document.getElementById('results-display');
+  if (!results) return;
+
+  const warn = document.createElement('div');
+  warn.id = 'score-threshold-warning';
+  warn.textContent = `⚠️ This load is below your minimum fair score (${threshold}).`;
+  warn.style.margin = '12px 0';
+  warn.style.padding = '10px 12px';
+  warn.style.border = '1px solid rgba(248,113,113,0.6)';
+  warn.style.background = 'rgba(248,113,113,0.12)';
+  warn.style.color = '#fecaca';
+  warn.style.borderRadius = '10px';
+  warn.style.fontSize = '14px';
+
+  // Put it at the top of results
+  results.prepend(warn);
+}
+
 function resetResultsUI() {
+  removeScoreWarning();
+  removeTargetWarning(); // ✅ add this line so it clears immediately like the score warning
+
   const scoreValue = document.getElementById('score-value');
   const verdictText = document.getElementById('verdict-text');
   const scoreCircle = document.getElementById('score-circle');
@@ -151,15 +235,62 @@ function setResultsVisibleDuringAnalyze(isAnalyzing) {
   const statsGrid = document.querySelector('#results-display .stats-grid');
   const decisionRow = document.querySelector('#results-display .form-row');
 
+  const npmEl = document.getElementById('net-per-mile');
+  const npmBox =
+    npmEl?.closest('.stat-box') ||
+    npmEl?.closest('.stat') ||
+    npmEl?.closest('.metric') ||
+    npmEl?.parentElement;
+
+  const targetWarn = document.getElementById('target-npm-warning');
+  document.getElementById('target-npm-warning')?.classList.toggle('hidden', isAnalyzing);
+
   if (isAnalyzing) {
     statsGrid?.classList.add('hidden');
     decisionRow?.classList.add('hidden');
+    npmBox?.classList.add('hidden');
+    targetWarn?.classList.add('hidden');
   } else {
     statsGrid?.classList.remove('hidden');
     decisionRow?.classList.remove('hidden');
+    npmBox?.classList.remove('hidden');
+    targetWarn?.classList.remove('hidden');
   }
 }
 
+function removeTargetWarning() {
+  const existing = document.getElementById('target-npm-warning');
+  if (existing) existing.remove();
+}
+
+function showTargetWarningIfNeeded(netPerMile) {
+  removeTargetWarning();
+
+  const target = Number(userPrefs?.target_net_per_mile);
+  if (!Number.isFinite(target) || target <= 0) return;
+
+  const npm = Number(netPerMile);
+  if (!Number.isFinite(npm)) return;
+
+  if (npm >= target) return;
+
+  const results = document.getElementById('results-display');
+  if (!results) return;
+
+  const warn = document.createElement('div');
+  warn.id = 'target-npm-warning';
+  warn.textContent = `⚠️ Net $/mile ($${npm.toFixed(2)}) is below your target ($${target.toFixed(2)}).`;
+  warn.style.margin = '12px 0';
+  warn.style.padding = '10px 12px';
+  warn.style.border = '1px solid rgba(251,191,36,0.55)';
+  warn.style.background = 'rgba(251,191,36,0.12)';
+  warn.style.color = '#fde68a';
+  warn.style.borderRadius = '10px';
+  warn.style.fontSize = '14px';
+
+  // Put it near the top
+  results.prepend(warn);
+}
 /* -------------------------------------------------------------------------- */
 /*                            AUTO MILES (NO ANALYSIS)                        */
 /* -------------------------------------------------------------------------- */
@@ -204,6 +335,9 @@ async function calculateProfit() {
         redirectToAuth();
         return;
       }
+    } else {
+      // refresh prefs occasionally (safe)
+      if (!userPrefs) await loadPreferencesIfLoggedIn();
     }
   }
 
@@ -215,6 +349,7 @@ async function calculateProfit() {
 
   document.getElementById('results-display')?.classList.remove('hidden');
   resetResultsUI();
+  resetDecisionButtonsUI();
   setResultsVisibleDuringAnalyze(true);
 
   const origin = document.getElementById('origin')?.value?.trim() || '';
@@ -239,13 +374,17 @@ async function calculateProfit() {
 
     let avgGasPrice = null;
     if (routeInfo?.samplePoints?.length) {
-      avgGasPrice = await fetchAvgDieselPriceEIA(routeInfo.samplePoints);
+      const fuelType = document.getElementById('fuel-type')?.value || 'diesel';
+      avgGasPrice = await fetchAvgDieselPriceEIA(routeInfo.samplePoints, fuelType, routeInfo.miles);
     }
 
     if (avgGasEl) {
       avgGasEl.innerText =
         typeof avgGasPrice === 'number' ? `$${avgGasPrice.toFixed(2)}` : '$--';
     }
+    
+    const analysisId = (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random());
+    lastComputed.analysisId = analysisId;
 
     // Profit calc (uses avg diesel if available)
     await calculateProfitInternal(avgGasPrice, true);
@@ -293,7 +432,13 @@ async function calculateProfitInternal(forcedGasPrice = null, showResults = true
   document.getElementById('verdict-text').innerText = data.rating;
   document.getElementById('score-circle').style.borderColor = data.color;
 
+
+  // ✅ show warning based on preference threshold
+  showScoreWarningIfNeeded(data.score);
+  showTargetWarningIfNeeded(data.netPerMile);
+
   lastComputed = {
+    analysisId: lastComputed.analysisId || null,
     rate,
     miles,
     mpg,
@@ -301,6 +446,8 @@ async function calculateProfitInternal(forcedGasPrice = null, showResults = true
     fuelCost: data.fuelCost,
     netRevenue: data.netRevenue,
     netPerMile: data.netPerMile,
+    score: data.score,
+    rating: data.rating,
   };
 }
 
@@ -308,31 +455,91 @@ async function calculateProfitInternal(forcedGasPrice = null, showResults = true
 /*                             ACCEPT / REJECT SAVE                           */
 /* -------------------------------------------------------------------------- */
 
+function setDecisionButtonsDisabled(disabled) {
+  const row = document.querySelector('#results-display .form-row');
+  if (!row) return;
+
+  const buttons = row.querySelectorAll('button');
+  buttons.forEach((btn) => {
+    btn.disabled = !!disabled;
+  });
+}
+
+function setDecisionButtonsLabelAfterChoice(choice) {
+  const row = document.querySelector('#results-display .form-row');
+  if (!row) return;
+
+  const [acceptBtn, rejectBtn] = row.querySelectorAll('button');
+  if (!acceptBtn || !rejectBtn) return;
+
+  if (choice === 'accepted') {
+    acceptBtn.textContent = '✅ Accepted';
+    rejectBtn.textContent = 'Reject Load';
+  } else if (choice === 'rejected') {
+    rejectBtn.textContent = '❌ Rejected';
+    acceptBtn.textContent = 'Accept Load';
+  }
+}
+
+function resetDecisionButtonsUI() {
+  const row = document.querySelector('#results-display .form-row');
+  if (!row) return;
+
+  const [acceptBtn, rejectBtn] = row.querySelectorAll('button');
+  if (acceptBtn) acceptBtn.textContent = 'Accept Load';
+  if (rejectBtn) rejectBtn.textContent = 'Reject Load';
+
+  setDecisionButtonsDisabled(false);
+}
+
 async function submitDecision(decision) {
   if (lastComputed.rate == null) return;
+
+  // ✅ immediately prevent double-clicks
+  setDecisionButtonsDisabled(true);
+  setDecisionButtonsLabelAfterChoice(decision);
 
   const origin = document.getElementById('origin')?.value || null;
   const destination = document.getElementById('destination')?.value || null;
 
-  const res = await fetch('/api/save-load', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      decision,
-      origin,
-      destination,
-      rate: lastComputed.rate,
-      miles: lastComputed.miles,
-      fuelCost: lastComputed.fuelCost,
-      netRevenue: lastComputed.netRevenue,
-      netPerMile: lastComputed.netPerMile,
-      avgGasPrice: lastComputed.fuelPrice,
-    }),
-  });
+  try {
+    const res = await fetch('/api/save-load', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision,
+        analysisId: lastComputed.analysisId,
+        origin,
+        destination,
+        rate: lastComputed.rate,
+        miles: lastComputed.miles,
+        fuelCost: lastComputed.fuelCost,
+        netRevenue: lastComputed.netRevenue,
+        netPerMile: lastComputed.netPerMile,
+        avgGasPrice: lastComputed.fuelPrice,
+      }),
+    });
 
-  if (res.status === 401) {
-    const returnUrl = encodeURIComponent('/check-load.html');
-    window.location.href = `/auth.html?returnUrl=${returnUrl}`;
+    if (res.status === 401) {
+      // if they aren’t logged in, re-enable so they can try again after login
+      setDecisionButtonsDisabled(false);
+
+      
+      window.location.href = `/auth.html?returnUrl=${returnUrl}`;
+      return;
+    }
+
+    // ✅ if server errors, re-enable so they can retry
+    if (!res.ok) {
+      setDecisionButtonsDisabled(false);
+      alert('Could not save this decision. Please try again.');
+      return;
+    }
+
+    // success: keep disabled (prevents duplicates)
+  } catch (e) {
+    setDecisionButtonsDisabled(false);
+    alert('Network error saving decision. Please try again.');
   }
 }
 
@@ -412,20 +619,42 @@ function sampleRoutePoints(coords, n) {
 /*                             DIESEL (EIA via API)                           */
 /* -------------------------------------------------------------------------- */
 
-async function fetchAvgDieselPriceEIA(samplePoints) {
+async function fetchAvgDieselPriceEIA(samplePoints, fuelType = 'diesel', routeMiles=null) {
   try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 12000); // hard stop at 12s
+
     const res = await fetch('/api/gas/average', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ points: samplePoints }),
+      body: JSON.stringify({ points: samplePoints, fuelType, routeMiles }),
+      signal: controller.signal
     });
+
+    clearTimeout(t);
 
     if (!res.ok) throw new Error('gas avg endpoint failed');
     const data = await res.json();
 
     return typeof data?.avgFuelPrice === 'number' ? data.avgFuelPrice : null;
   } catch (e) {
-    console.log('Avg diesel price failed:', e.message);
-    return null;
+    console.log('Avg diesel price failed (timeout/err):', e.message);
+    return null; // IMPORTANT: let analysis continue without diesel avg
   }
 }
+
+
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inputs = ['origin', 'destination', 'rate', 'mpg'];
+
+  inputs.forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.addEventListener('input', updateAnalyzeButtonState);
+    }
+  });
+
+  updateAnalyzeButtonState();
+});

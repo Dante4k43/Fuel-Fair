@@ -7,42 +7,126 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app-container">
 
-    <a href="index.html" style="color: var(--brand-blue); text-decoration: none; float: left;">← Home</a>
+  <a href="/index.html">
+      <img src="/logo.png" class="site-logo" alt="Fuel Fair Logo">
+  </a>
 
-    <div class="home-header" style="margin-top: 20px;">
-      <h1>Account</h1>
-      <p>Manage your login and password.</p>
-    </div>
+  <div class="page-shell">
+    <div class="app-container">
 
-    <!-- Same card sizing + padding style as auth -->
-    <div class="card menu-card rectangle auth-card" style="cursor: default;">
+      <div class="account-topbar">
+        <a href="index.html" class="account-home-link">← Home</a>
 
-      <div id="account-email" class="account-email"></div>
-
-      <div class="account-actions">
-        <button id="signout" class="save-btn account-signout">Sign Out</button>
+        <a id="admin-link" href="/admin.html" class="admin-btn" style="display: none;">
+          🛠 Admin
+        </a>
       </div>
 
-      <div id="msg" class="auth-message"></div>
+      <div class="home-header" style="margin-top: 20px;">
+        <h1>Account</h1>
+        <p>Manage your login, password, and default load settings.</p>
+      </div>
 
-      <h3 class="account-heading">Change Password</h3>
+      <div class="card menu-card rectangle auth-card" style="cursor: default;">
+        <div id="account-email" class="account-email"></div>
 
-      <!-- Same form class as auth -->
-      <form id="pw-form" class="auth-form">
-        <label>Current Password</label>
-        <input id="current" type="password" required autocomplete="current-password" />
+        <div class="account-actions">
+          <button id="signout" class="save-btn account-signout">Sign Out</button>
+        </div>
 
-        <label>New Password</label>
-        <input id="next" type="password" required autocomplete="new-password" />
+        <div id="msg" class="auth-message"></div>
 
-        <button id="pw-btn" type="submit" class="primary-btn auth-submit">
-          Update Password
-        </button>
-      </form>
+        <h3 class="account-heading">Change Password</h3>
 
+        <form id="pw-form" class="auth-form">
+          <label>Current Password</label>
+          <input id="current" type="password" required autocomplete="current-password" />
+
+          <label>New Password</label>
+          <input id="next" type="password" required autocomplete="new-password" />
+
+          <button id="pw-btn" type="submit" class="primary-btn auth-submit">
+            Update Password
+          </button>
+        </form>
+
+        <h3 class="account-heading" style="margin-top: 22px;">Preferences</h3>
+        <p style="margin: 0 0 12px; color: var(--muted-text, #94a3b8); font-size: 14px;">
+          These defaults help auto-fill your Check Load inputs and flag low-score loads.
+        </p>
+
+        <form class="auth-form" onsubmit="return false;">
+          <label for="pref-truck-type">Truck Type</label>
+          <select id="pref-truck-type">
+            <option value="">Select…</option>
+            <option value="Dry Van">Dry Van</option>
+            <option value="Reefer">Reefer</option>
+            <option value="Flatbed">Flatbed</option>
+            <option value="Power Only">Power Only</option>
+            <option value="Box Truck">Box Truck</option>
+            <option value="Hotshot">Hotshot</option>
+          </select>
+
+          <label for="pref-fuel-type">Fuel Type</label>
+          <select id="pref-fuel-type">
+            <option value="">Select…</option>
+            <option value="Diesel">Diesel</option>
+            <option value="Gas">Gas</option>
+          </select>
+
+          <label for="pref-mpg">Default MPG</label>
+          <input
+            id="pref-mpg"
+            type="number"
+            inputmode="decimal"
+            step="0.1"
+            min="1"
+            placeholder="e.g. 6.5"
+          />
+
+          <label for="pref-threshold">Minimum Fair Score</label>
+          <input
+            id="pref-threshold"
+            type="number"
+            inputmode="numeric"
+            step="1"
+            min="0"
+            max="100"
+            placeholder="e.g. 75"
+          />
+
+          <label for="pref-target">Target Net $/Mile</label>
+          <input
+            id="pref-target"
+            type="number"
+            inputmode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="e.g. 2.00"
+          />
+
+          <button id="pref-save" type="button" class="primary-btn auth-submit" style="margin-top: 10px;">
+            Save Preferences
+          </button>
+
+          <div id="pref-msg" class="auth-message" style="margin-top: 10px;"></div>
+        </form>
+      </div>
     </div>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <div class="footer-links">
+          <a href="/data-transparency.html">Data & Transparency</a>
+          <a href="/fair-load-score.html">How the Fair Load Score Works</a>
+        </div>
+
+        <div class="footer-copy">
+          © 2026 Fuel Fair • Built for independent drivers
+        </div>
+      </div>
+    </footer>
   </div>
 
   <script src="js/account.js"></script>

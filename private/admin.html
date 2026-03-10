@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <div class="header">
+      
+      <a href="index.html" class="account-home-link">← Home</a>
+
+      <h1>Admin Console</h1>
+    </div>
+
+    <div class="card">
+      <h2>Exports</h2>
+      <p>Download a CSV of all accepted + rejected loads with user email and truck settings (if available).</p>
+
+      <div class="form-row" style="gap:12px; flex-wrap: wrap;">
+        <label>
+          From (optional)
+          <input id="from-date" type="date" />
+        </label>
+
+        <label>
+          To (optional)
+          <input id="to-date" type="date" />
+        </label>
+
+        <button id="export-btn" class="primary-btn">
+          Export Loads CSV
+        </button>
+      </div>
+
+      <div id="admin-status" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <script src="js/admin.js"></script>
+</body>
+</html>
