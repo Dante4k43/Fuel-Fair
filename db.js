@@ -46,6 +46,12 @@ const initDb = async () => {
     await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS origin TEXT;`);
     await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS destination TEXT;`);
 
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS route_geometry JSONB;`);
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS route_distance_meters NUMERIC;`);
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS route_duration_seconds NUMERIC;`);
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS route_sample_points JSONB;`);
+    await pool.query(`ALTER TABLE loads ADD COLUMN IF NOT EXISTS fuel_type VARCHAR(20);`);
+
     /* ---------------------------------------------------------------------- */
     /* ✅ NEW: Make loads per-user (safe migrations)                           */
     /* ---------------------------------------------------------------------- */

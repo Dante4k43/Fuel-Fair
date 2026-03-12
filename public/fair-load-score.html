@@ -5,19 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fuel Fair — How the Fair Load Score Works</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,600&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="page-shell">
+    <a href="/index.html">
+      <img src="/logo.png" class="site-logo" alt="Fuel Fair Logo">
+    </a>
+
     <div class="app-container">
+      <div id="page-header">
+        <div class="page-topbar">
+          <a href="/index.html" class="account-home-link">← Home</a>
 
-      <a href="/index.html" class="account-home-link">← Home</a>
+          <div class="top-nav-right">
+            <a href="/account.html" class="profile-btn" aria-label="Account">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="8" r="4"></circle>
+                <path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
 
-      <div class="home-header">
-        <h1>How the Fair Load Score Works</h1>
-        <p>The Fair Load Score helps drivers quickly understand the profitability of a load.</p>
+        <h1 style="margin-bottom:20px; text-align:center;">How the Fair Load Score Works</h1>
       </div>
 
       <div class="card">
+        <p>The Fair Load Score helps drivers quickly understand the profitability of a load.</p>
+
         <h3>What the Score Measures</h3>
         <p>The Fair Load Score evaluates a load using three main factors:</p>
 
@@ -29,7 +47,7 @@
 
         <h3>How Net Profit Is Calculated</h3>
         <p>Fuel Fair estimates fuel cost using:</p>
-        <p><strong>Fuel Cost = (Miles ÷ MPG) × Diesel Price</strong></p>
+        <p><strong>Fuel Cost = (Miles ÷ MPG) × Fuel Price</strong></p>
         <p>Net profit is then calculated by subtracting fuel cost from the load rate.</p>
 
         <h3>Net Revenue Per Mile</h3>
@@ -68,9 +86,15 @@
           <a href="/fair-load-score.html">How the Fair Load Score Works</a>
         </div>
 
-        <div class="footer-copy">
-          © 2026 Fuel Fair • Built for independent drivers
-        </div>
+       <div class="footer-copy">
+  © 2026 Fuel Fair • Built for independent drivers
+</div>
+
+<div class="footer-contact">
+  <a href="mailto:support@fuelfair.com">support@fuelfair.com</a>
+  <span class="footer-separator">•</span>
+  <a href="mailto:partnerships@fuelfair.com">partnerships@fuelfair.com</a>
+</div>
       </div>
     </footer>
   </div>

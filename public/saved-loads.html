@@ -2,9 +2,12 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Saved Loads</title>
+  <title>Fuel Fair | Saved Loads</title>
   <link rel="stylesheet" href="/styles.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,600&display=swap" rel="stylesheet">
 </head>
 
 <body class="dark-body">
@@ -15,18 +18,30 @@
 
   <div class="app-container">
 
-    <div class="page-topbar">
-      <a href="index.html" class="account-home-link">← Home</a>
+    <div id="page-header">
+
+  <div class="page-topbar">
+    <a href="/index.html" class="account-home-link">← Home</a>
+
+    <div class="top-nav-right">
+      <a href="/account.html" class="profile-btn" aria-label="Account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path>
+        </svg>
+      </a>
     </div>
+  </div>
 
-    <h2 style="margin-bottom:20px; text-align:center;">Saved Loads</h2>
+  <h1 style="margin-bottom:20px; text-align:center;">Saved Loads</h1>
 
+</div>
     <div id="loads-container"></div>
     <div id="pagination" class="pagination"></div>
 
     <br>
 
-    <a href="/check-load.html" class="save-btn">Back to Analyzer</a>
+    <a href="/check-load.html" class="save-btn">Back to Load Checker</a>
 
   </div>
 

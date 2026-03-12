@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Profit Engine | Load Analyzer</title>
+  <title>Fuel Fair | Load Analyzer</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,600&display=swap" rel="stylesheet">
 </head>
 <body>
   <a href="/index.html">
@@ -14,11 +17,27 @@
   </a>
 
   <div class="app-container">
-      <div class="page-topbar">
-      <a href="index.html" class="account-home-link">← Home</a>
+
+
+
+  <div id="page-header">
+
+  <div class="page-topbar">
+    <a href="/index.html" class="account-home-link">← Home</a>
+
+    <div class="top-nav-right">
+      <a href="/account.html" class="profile-btn" aria-label="Account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path>
+        </svg>
+      </a>
     </div>
-     <h1 style="margin-bottom:20px; text-align:center;">Check Loads</h1>
-  
+  </div>
+
+  <h1 style="margin-bottom:20px; text-align:center;">Check Load</h1>
+
+</div>
     
     <!-- ✅ Map at TOP (always visible) -->
     <div id="map-container"><div id="map"></div></div>
@@ -65,42 +84,59 @@
     </main>
 
     <section id="results-display" class="hidden">
-      <div class="verdict-container">
-        <div id="score-circle">
-          <span id="score-value">--</span>
-        </div>
-        <h2 id="verdict-text">Analyzing...</h2>
+  <div id="results-main">
+    <div class="verdict-container">
+      <div id="score-circle">
+        <span id="score-value">--</span>
+      </div>
+      <h2 id="verdict-text">Analyzing...</h2>
+    </div>
+
+    <div id="stats-grid" class="stats-grid">
+      <div class="stat-item">
+        <small>Net $/Mile</small><br />
+        <strong id="net-per-mile">$0.00</strong>
       </div>
 
-      <div id="stats-grid" class="stats-grid">
-        <div class="stat-item">
-          <small>Net $/Mile</small><br />
-          <strong id="net-per-mile">$0.00</strong>
-        </div>
-
-        <!-- ✅ NEW -->
-        <div class="stat-item">
-          <small>Avg Gas Price</small><br />
-          <strong id="avg-gas-price">$--</strong>
-        </div>
-
-        <div class="stat-item">
-          <small>Fuel Cost</small><br />
-          <strong id="total-fuel-cost" class="danger-text">$0</strong>
-        </div>
-
-        <div class="stat-item full-width">
-          <small>Net Profit</small><br />
-          <strong id="net-revenue" class="success-text">$0</strong>
-        </div>
+      <div class="stat-item">
+        <small>Avg Gas Price</small><br />
+        <strong id="avg-gas-price">$--</strong>
       </div>
 
-      <div class="form-row">
-        <button class="save-btn" onclick="submitDecision('accepted')">Accept Load</button>
-        <button class="save-btn" onclick="submitDecision('rejected')">Reject Load</button>
+      <div class="stat-item">
+        <small>Fuel Cost</small><br />
+        <strong id="total-fuel-cost" class="danger-text">$0</strong>
       </div>
-    </section>
+
+      <div class="stat-item full-width">
+        <small>Net Profit</small><br />
+        <strong id="net-revenue" class="success-text">$0</strong>
+      </div>
+    </div>
+
+    <div class="form-row" id="decision-row">
+      <button class="save-btn" onclick="submitDecision('accepted')">Accept Load</button>
+      <button class="save-btn" onclick="submitDecision('rejected')">Reject Load</button>
+    </div>
   </div>
+
+  <div id="decision-confirmation" class="decision-confirmation hidden">
+    <div class="decision-confirmation-card">
+      <div id="decision-confirmation-icon" class="decision-confirmation-icon">✓</div>
+      <h2 id="decision-confirmation-title">Your load has been saved.</h2>
+      <p id="decision-confirmation-text">
+        What would you like to do next?
+      </p>
+
+      <div class="decision-confirmation-actions">
+        <a href="/check-load.html" class="save-btn decision-nav-btn">Check a Load</a>
+        <a href="/saved-loads.html" class="save-btn decision-nav-btn">Saved Loads</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="screen-wipe" class="screen-wipe hidden"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="js/check-load.js"></script>

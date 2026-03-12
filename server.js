@@ -27,7 +27,8 @@ const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 const pool = require('./db');
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.static('public'));
 
 app.set('trust proxy', 1);
@@ -361,6 +362,27 @@ app.post('/api/gas/average', async (req, res) => {
   }
 });
 /* ------------------------------- EIA Helpers ------------------------------ */
+
+function buildOverpassFuelQuery(points, radiusMeters = 5000) {
+  const safePoints = Array.isArray(points) ? points.slice(0, 8) : [];
+
+  const aroundParts = safePoints
+    .filter(p => Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lon)))
+    .map(p => `
+      node["amenity"="fuel"](around:${radiusMeters},${Number(p.lat)},${Number(p.lon)});
+      way["amenity"="fuel"](around:${radiusMeters},${Number(p.lat)},${Number(p.lon)});
+      relation["amenity"="fuel"](around:${radiusMeters},${Number(p.lat)},${Number(p.lon)});
+    `)
+    .join('\n');
+
+  return `
+    [out:json][timeout:25];
+    (
+      ${aroundParts}
+    );
+    out center tags;
+  `;
+}
 
 const eiaCache = new Map(); // seriesId -> { value, ts }
 
@@ -753,6 +775,12 @@ app.post('/api/preferences', requireAuth, async (req, res) => {
 });
 
 /* ------------------------------ Save a Load ------------------------------- */
+function format2(value) {
+  if (value === null || value === undefined) return '';
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(2) : '';
+}
+
 function csvEscape(value) {
   if (value === null || value === undefined) return '';
   const s = String(value);
@@ -826,12 +854,12 @@ app.get('/api/admin/exports/loads.csv', requireAdmin, async (req, res) => {
         csvEscape(row.decision),
         csvEscape(row.origin),
         csvEscape(row.destination),
-        csvEscape(row.rate),
-        csvEscape(row.miles),
-        csvEscape(row.fuel_cost),
-        csvEscape(row.net_profit),
-        csvEscape(row.net_per_mile),
-        csvEscape(row.avg_gas_price),
+        csvEscape(format2(row.rate)),
+        csvEscape(format2(row.miles)),
+        csvEscape(format2(row.fuel_cost)),
+        csvEscape(format2(row.net_profit)),
+        csvEscape(format2(row.net_per_mile)),
+        csvEscape(format2(row.avg_gas_price)),
         csvEscape(row.created_at),
       ].join(',') + '\n';
     }
@@ -850,7 +878,7 @@ app.get('/admin.html', requireAdmin, (req, res) => {
 app.post('/api/save-load', async (req, res) => {
   const {
     decision,
-    analysisId, // ✅ add if you implemented Step 3
+    analysisId,
     origin,
     destination,
     rate,
@@ -858,7 +886,12 @@ app.post('/api/save-load', async (req, res) => {
     fuelCost,
     netRevenue,
     netPerMile,
-    avgGasPrice
+    avgGasPrice,
+    fuelType,
+    routeGeometry,
+    routeDistanceMeters,
+    routeDurationSeconds,
+    routeSamplePoints
   } = req.body || {};
 
   try {
@@ -874,33 +907,56 @@ app.post('/api/save-load', async (req, res) => {
     const anonId = userId ? null : (req.session?.anonId ?? null);
 
     const result = await pool.query(
-      `
-      INSERT INTO loads
-        (user_id, anon_id, analysis_id, decision, origin, destination,
-         rate, miles,
-         fuel_cost, net_profit, net_per_mile,
-         avg_gas_price, fuel_price)
-      VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-      ON CONFLICT DO NOTHING
-      RETURNING id, created_at
-      `,
-      [
-        userId,
-        anonId,
-        analysisId ?? null,
-        decision ?? null,
-        origin ?? null,
-        destination ?? null,
-        rate == null ? null : Number(rate),
-        miles == null ? null : Number(miles),
-        fuelCost == null ? null : Number(fuelCost),
-        netRevenue == null ? null : Number(netRevenue),
-        netPerMile == null ? null : Number(netPerMile),
-        avgGasPrice == null ? null : Number(avgGasPrice),
-        avgGasPrice == null ? null : Number(avgGasPrice),
-      ]
-    );
+  `
+  INSERT INTO loads
+    (
+      user_id,
+      anon_id,
+      analysis_id,
+      decision,
+      origin,
+      destination,
+      rate,
+      miles,
+      fuel_cost,
+      net_profit,
+      net_per_mile,
+      avg_gas_price,
+      fuel_price,
+      fuel_type,
+      route_geometry,
+      route_distance_meters,
+      route_duration_seconds,
+      route_sample_points
+    )
+  VALUES
+    (
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+    )
+  ON CONFLICT DO NOTHING
+  RETURNING id, created_at
+  `,
+  [
+    userId,
+    anonId,
+    analysisId ?? null,
+    decision ?? null,
+    origin ?? null,
+    destination ?? null,
+    rate == null ? null : Number(rate),
+    miles == null ? null : Number(miles),
+    fuelCost == null ? null : Number(fuelCost),
+    netRevenue == null ? null : Number(netRevenue),
+    netPerMile == null ? null : Number(netPerMile),
+    avgGasPrice == null ? null : Number(avgGasPrice),
+    avgGasPrice == null ? null : Number(avgGasPrice),
+    fuelType ? String(fuelType).toLowerCase() : null,
+    routeGeometry ? JSON.stringify(routeGeometry) : null,
+    routeDistanceMeters == null ? null : Number(routeDistanceMeters),
+    routeDurationSeconds == null ? null : Number(routeDurationSeconds),
+    Array.isArray(routeSamplePoints) ? JSON.stringify(routeSamplePoints) : null,
+  ]
+);
 
     if (!result.rows.length) {
       return res.json({ success: true, duplicate: true });
@@ -929,25 +985,26 @@ app.get('/api/loads', requireAuth, async (req, res) => {
     const total = Number(totalResult.rows[0].count);
 
     const result = await pool.query(
-      `
-      SELECT id,
-             decision,
-             origin,
-             destination,
-             rate,
-             miles,
-             fuel_cost,
-             net_profit,
-             net_per_mile,
-             avg_gas_price,
-             created_at
-      FROM loads
-      WHERE user_id = $1 AND decision = 'accepted'
-      ORDER BY created_at DESC
-      LIMIT $2 OFFSET $3
-      `,
-      [req.session.userId, limit, offset]
-    );
+    `
+    SELECT id,
+          decision,
+          origin,
+          destination,
+          rate,
+          miles,
+          fuel_cost,
+          net_profit,
+          net_per_mile,
+          avg_gas_price,
+          fuel_type,
+          created_at
+    FROM loads
+    WHERE user_id = $1 AND decision = 'accepted'
+    ORDER BY created_at DESC
+    LIMIT $2 OFFSET $3
+    `,
+    [req.session.userId, limit, offset]
+  );
 
     res.json({
       data: result.rows,
@@ -958,6 +1015,127 @@ app.get('/api/loads', requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error('GET LOADS ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/loads/:id', requireAuth, async (req, res) => {
+  try {
+    const loadId = Number(req.params.id);
+    if (!Number.isFinite(loadId)) {
+      return res.status(400).json({ error: 'invalid_load_id' });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        decision,
+        origin,
+        destination,
+        rate,
+        miles,
+        fuel_cost,
+        net_profit,
+        net_per_mile,
+        avg_gas_price,
+        fuel_type,
+        created_at,
+        route_geometry,
+        route_distance_meters,
+        route_duration_seconds,
+        route_sample_points
+      FROM loads
+      WHERE id = $1 AND user_id = $2
+      LIMIT 1
+      `,
+      [loadId, req.session.userId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'load_not_found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('GET LOAD BY ID ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/fuel/stations', requireAuth, async (req, res) => {
+  try {
+    const { routeSamplePoints = [], fuelType = 'diesel' } = req.body || {};
+    const safePoints = Array.isArray(routeSamplePoints) ? routeSamplePoints.slice(0, 8) : [];
+
+    if (!safePoints.length) {
+      return res.json({ stations: [] });
+    }
+
+    const query = buildOverpassFuelQuery(safePoints, 5000);
+
+    const r = await fetchWithTimeout(
+      'https://overpass-api.de/api/interpreter',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain',
+          Accept: 'application/json',
+          'User-Agent': NOMINATIM_UA,
+        },
+        body: query,
+      },
+      30000
+    );
+
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      return res.status(502).json({
+        error: 'overpass_failed',
+        upstreamStatus: r.status,
+        upstreamBody: text.slice(0, 300),
+      });
+    }
+
+    const data = await r.json().catch(() => null);
+    const elements = Array.isArray(data?.elements) ? data.elements : [];
+
+    const seen = new Set();
+    const stations = [];
+
+    for (const el of elements) {
+      const lat = Number(el.lat ?? el.center?.lat);
+      const lon = Number(el.lon ?? el.center?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const tags = el.tags || {};
+      const key = `${lat.toFixed(5)}|${lon.toFixed(5)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      stations.push({
+        id: el.id,
+        osmType: el.type,
+        name: tags.name || tags.brand || 'Fuel Station',
+        brand: tags.brand || '',
+        lat,
+        lon,
+        fuelType,
+        hasDiesel:
+          tags['fuel:diesel'] === 'yes' ||
+          tags['fuel:truck_diesel'] === 'yes' ||
+          false,
+        hasGasoline:
+          tags['fuel:octane_87'] === 'yes' ||
+          tags['fuel:gasoline'] === 'yes' ||
+          tags['fuel:e10'] === 'yes' ||
+          false,
+      });
+    }
+
+    res.json({ stations });
+  } catch (err) {
+    console.error('FUEL STATIONS ERROR:', err);
     res.status(500).json({ error: err.message });
   }
 });

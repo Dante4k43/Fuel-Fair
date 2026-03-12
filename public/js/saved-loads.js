@@ -43,9 +43,18 @@ async function loadSavedLoads(page = 1) {
     container.innerHTML = loads.map(load => `
       <div class="load-card ${load.decision}">
         <div class="load-header">
-            <strong>
-                ${load.origin || '—'} → ${load.destination || '—'}
-            </strong>
+            <div class="load-title-wrap">
+                <strong>
+                    ${load.origin || '—'} → ${load.destination || '—'}
+                </strong>
+
+                <span class="fuel-badge ${load.fuel_type === 'diesel' ? 'diesel' : 'gas'}">
+                    ${load.fuel_type
+                      ? load.fuel_type.charAt(0).toUpperCase() + load.fuel_type.slice(1)
+                      : '--'}
+                </span>
+            </div>
+
             <span class="decision ${load.decision}">
                 ${load.decision?.toUpperCase() || '—'}
             </span>
@@ -61,8 +70,14 @@ async function loadSavedLoads(page = 1) {
         </div>
 
         <div class="load-date">
-          ${new Date(load.created_at).toLocaleString()}
+        ${new Date(load.created_at).toLocaleString()}
         </div>
+
+      <div class="load-actions" style="margin-top:12px;">
+        <button class="save-btn fuel-map-btn" onclick="openFuelMap(${load.id})">
+          View Fuel Map
+        </button>
+      </div>
       </div>
     `).join('');
 
@@ -95,4 +110,8 @@ function renderPagination(page, totalPages) {
 function changePage(page) {
   currentPage = page;
   loadSavedLoads(page);
+}
+
+function openFuelMap(loadId) {
+  window.location.href = `/fuel-map.html?loadId=${encodeURIComponent(loadId)}`;
 }

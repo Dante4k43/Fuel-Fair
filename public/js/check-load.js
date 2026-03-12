@@ -6,6 +6,7 @@ const ENABLE_SIGNUP_GATE = true;
 
 // Stored after analysis so Accept/Reject can persist the same values
 let lastComputed = {
+  analysisId: null,
   rate: null,
   miles: null,
   mpg: null,
@@ -15,6 +16,10 @@ let lastComputed = {
   netPerMile: null,
   score: null,
   rating: null,
+  routeGeometry: null,
+  routeDistanceMeters: null,
+  routeDurationSeconds: null,
+  routeSamplePoints: [],
 };
 
 let isAutoUpdating = false;
@@ -350,6 +355,7 @@ async function calculateProfit() {
   document.getElementById('results-display')?.classList.remove('hidden');
   resetResultsUI();
   resetDecisionButtonsUI();
+  resetDecisionConfirmationUI();
   setResultsVisibleDuringAnalyze(true);
 
   const origin = document.getElementById('origin')?.value?.trim() || '';
@@ -366,6 +372,15 @@ async function calculateProfit() {
         const milesEl = document.getElementById('miles');
         if (milesEl) milesEl.value = Math.round(routeInfo.miles);
       }
+    }
+
+    if (routeInfo) {
+      lastComputed.routeGeometry = routeInfo.routeGeometry || null;
+      lastComputed.routeDistanceMeters = routeInfo.routeDistanceMeters || null;
+      lastComputed.routeDurationSeconds = routeInfo.routeDurationSeconds || null;
+      lastComputed.routeSamplePoints = Array.isArray(routeInfo.samplePoints)
+        ? routeInfo.samplePoints
+        : [];
     }
 
     // Avg diesel ONLY on analyze
@@ -438,17 +453,23 @@ async function calculateProfitInternal(forcedGasPrice = null, showResults = true
   showTargetWarningIfNeeded(data.netPerMile);
 
   lastComputed = {
-    analysisId: lastComputed.analysisId || null,
-    rate,
-    miles,
-    mpg,
-    fuelPrice: typeof forcedGasPrice === 'number' ? forcedGasPrice : null,
-    fuelCost: data.fuelCost,
-    netRevenue: data.netRevenue,
-    netPerMile: data.netPerMile,
-    score: data.score,
-    rating: data.rating,
-  };
+  analysisId: lastComputed.analysisId || null,
+  rate,
+  miles,
+  mpg,
+  fuelPrice: typeof forcedGasPrice === 'number' ? forcedGasPrice : null,
+  fuelCost: data.fuelCost,
+  netRevenue: data.netRevenue,
+  netPerMile: data.netPerMile,
+  score: data.score,
+  rating: data.rating,
+  routeGeometry: lastComputed.routeGeometry || null,
+  routeDistanceMeters: lastComputed.routeDistanceMeters || null,
+  routeDurationSeconds: lastComputed.routeDurationSeconds || null,
+  routeSamplePoints: Array.isArray(lastComputed.routeSamplePoints)
+    ? lastComputed.routeSamplePoints
+    : [],
+};
 }
 
 /* -------------------------------------------------------------------------- */
@@ -465,20 +486,79 @@ function setDecisionButtonsDisabled(disabled) {
   });
 }
 
-function setDecisionButtonsLabelAfterChoice(choice) {
-  const row = document.querySelector('#results-display .form-row');
-  if (!row) return;
+function playScreenWipeTransition(onCovered) {
+  return new Promise((resolve) => {
+    const wipe = document.getElementById('screen-wipe');
+    if (!wipe) {
+      if (typeof onCovered === 'function') onCovered();
+      resolve();
+      return;
+    }
 
-  const [acceptBtn, rejectBtn] = row.querySelectorAll('button');
-  if (!acceptBtn || !rejectBtn) return;
+    wipe.classList.remove('hidden', 'wipe-in', 'wipe-out');
 
-  if (choice === 'accepted') {
-    acceptBtn.textContent = '✅ Accepted';
-    rejectBtn.textContent = 'Reject Load';
-  } else if (choice === 'rejected') {
-    rejectBtn.textContent = '❌ Rejected';
-    acceptBtn.textContent = 'Accept Load';
+    // restart animation cleanly
+    void wipe.offsetWidth;
+
+    wipe.classList.add('wipe-in');
+
+    // when screen is fully covered, swap UI
+    setTimeout(() => {
+      if (typeof onCovered === 'function') onCovered();
+
+      wipe.classList.remove('wipe-in');
+      wipe.classList.add('wipe-out');
+
+      setTimeout(() => {
+        wipe.classList.remove('wipe-out');
+        wipe.classList.add('hidden');
+        resolve();
+      }, 380);
+    }, 320);
+  });
+}
+
+
+function showDecisionConfirmation(decision) {
+  const resultsMain = document.getElementById('results-main');
+  const confirmation = document.getElementById('decision-confirmation');
+  const card = confirmation?.querySelector('.decision-confirmation-card');
+  const icon = document.getElementById('decision-confirmation-icon');
+  const title = document.getElementById('decision-confirmation-title');
+  const text = document.getElementById('decision-confirmation-text');
+
+  if (!resultsMain || !confirmation || !card || !icon || !title || !text) return;
+
+  document.body.classList.add('decision-mode');
+
+  resultsMain.classList.add('hidden');
+  confirmation.classList.remove('hidden');
+
+  card.classList.remove('is-accepted', 'is-rejected');
+
+  if (decision === 'accepted') {
+    card.classList.add('is-accepted');
+    icon.textContent = '✓';
+    title.textContent = 'Your load has been saved.';
+    text.textContent = 'You can analyze another load or review your saved loads.';
+  } else {
+    card.classList.add('is-rejected');
+    icon.textContent = '✕';
+    title.textContent = 'You rejected this load.';
+    text.textContent = 'You can check another load or head to your saved loads.';
   }
+}
+
+function resetDecisionConfirmationUI() {
+  const resultsMain = document.getElementById('results-main');
+  const confirmation = document.getElementById('decision-confirmation');
+  const card = confirmation?.querySelector('.decision-confirmation-card');
+
+  document.body.classList.remove('decision-mode');
+
+  resultsMain?.classList.remove('hidden');
+  confirmation?.classList.add('hidden');
+  card?.classList.remove('is-accepted', 'is-rejected');
 }
 
 function resetDecisionButtonsUI() {
@@ -495,54 +575,50 @@ function resetDecisionButtonsUI() {
 async function submitDecision(decision) {
   if (lastComputed.rate == null) return;
 
-  // ✅ immediately prevent double-clicks
   setDecisionButtonsDisabled(true);
-  setDecisionButtonsLabelAfterChoice(decision);
 
   const origin = document.getElementById('origin')?.value || null;
   const destination = document.getElementById('destination')?.value || null;
+  const fuelType = (document.getElementById('fuel-type')?.value || '').trim().toLowerCase();
 
   try {
     const res = await fetch('/api/save-load', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        decision,
-        analysisId: lastComputed.analysisId,
-        origin,
-        destination,
-        rate: lastComputed.rate,
-        miles: lastComputed.miles,
-        fuelCost: lastComputed.fuelCost,
-        netRevenue: lastComputed.netRevenue,
-        netPerMile: lastComputed.netPerMile,
-        avgGasPrice: lastComputed.fuelPrice,
-      }),
+      decision,
+      analysisId: lastComputed.analysisId,
+      origin,
+      destination,
+      rate: lastComputed.rate,
+      miles: lastComputed.miles,
+      fuelCost: lastComputed.fuelCost,
+      netRevenue: lastComputed.netRevenue,
+      netPerMile: lastComputed.netPerMile,
+      avgGasPrice: lastComputed.fuelPrice,
+      fuelType,
+      routeGeometry: lastComputed.routeGeometry,
+      routeDistanceMeters: lastComputed.routeDistanceMeters,
+      routeDurationSeconds: lastComputed.routeDurationSeconds,
+      routeSamplePoints: lastComputed.routeSamplePoints,
+    }),
     });
 
-    if (res.status === 401) {
-      // if they aren’t logged in, re-enable so they can try again after login
-      setDecisionButtonsDisabled(false);
-
-      
-      window.location.href = `/auth.html?returnUrl=${returnUrl}`;
-      return;
-    }
-
-    // ✅ if server errors, re-enable so they can retry
     if (!res.ok) {
       setDecisionButtonsDisabled(false);
       alert('Could not save this decision. Please try again.');
       return;
     }
 
-    // success: keep disabled (prevents duplicates)
+    await res.json().catch(() => null);
+
+    await playScreenWipeTransition(() => {
+    showDecisionConfirmation(decision);});
   } catch (e) {
     setDecisionButtonsDisabled(false);
     alert('Network error saving decision. Please try again.');
   }
 }
-
 /* -------------------------------------------------------------------------- */
 /*                                   ROUTING                                  */
 /* -------------------------------------------------------------------------- */
@@ -580,13 +656,14 @@ async function updateRoute(from, to, { simple = false, draw = true } = {}) {
     const route = data?.routes?.[0];
     if (!route) throw new Error('no route found');
 
-    const miles = route.distance * 0.000621371;
+    const miles = Number(route.distance) * 0.000621371;
 
     let samplePoints = [];
-    // Only sample if geometry exists (simple mode won't have it)
+    let routeGeometry = null;
+
     if (!simple && route.geometry?.coordinates?.length) {
-      const coords = route.geometry.coordinates;
-      samplePoints = sampleRoutePoints(coords, 6);
+      routeGeometry = route.geometry;
+      samplePoints = sampleRoutePoints(route.geometry.coordinates, 6);
 
       if (draw) {
         if (routeLine) map.removeLayer(routeLine);
@@ -595,7 +672,13 @@ async function updateRoute(from, to, { simple = false, draw = true } = {}) {
       }
     }
 
-    return { miles, samplePoints };
+    return {
+      miles,
+      routeGeometry,
+      routeDistanceMeters: Number(route.distance) || null,
+      routeDurationSeconds: Number(route.duration) || null,
+      samplePoints,
+    };
   } catch (e) {
     console.log('Routing failed:', e.message);
     return null;

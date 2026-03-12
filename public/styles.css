@@ -8,11 +8,26 @@
     --text-muted: #94a3b8;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+* {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;      /* This is SemiBold */
+    /*font-style: italic;    /* This provides the slant */
+}
+
 body {
   background-color: var(--bg-dark);
   color: var(--text-main);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-
   display: flex;
   justify-content: center;
 
@@ -28,7 +43,35 @@ body {
 }
 
 /* --- HOME PAGE / INDEX STYLES --- */
-.top-nav-right { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.top-nav-right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin: 0;
+}
+
+#page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.page-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.page-topbar .account-home-link {
+  flex: 0 0 auto;
+}
+
+.page-topbar .top-nav-right {
+  flex: 0 0 auto;
+}
+
 .profile-btn {
   display: flex;
   align-items: center;
@@ -190,7 +233,7 @@ input, select {
 
 .save-btn {
   flex: 1;
-  padding: 14px 0;
+  padding: 8px 14px;
   border-radius: 12px;
   font-size: 15px;
   font-weight: 600;
@@ -630,6 +673,25 @@ input, select {
   opacity: 0.7;
 }
 
+.footer-contact {
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.footer-contact a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.footer-contact a:hover {
+  text-decoration: underline;
+}
+
+.footer-separator {
+  margin: 0 8px;
+  opacity: 0.5;
+}
 
 
 
@@ -719,5 +781,517 @@ input, select {
 
   .site-logo:hover {
     transform: translateX(-18px) scale(1.05);
+  }
+}
+
+
+
+/* ===============================
+   Decision confirmation screen
+================================ */
+
+.decision-confirmation {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 340px;
+  padding: 24px 0;
+}
+
+.decision-confirmation-card {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+  background: linear-gradient(145deg, #16233a, #0f1a2d);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 36px 24px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+}
+
+.decision-confirmation-icon {
+  width: 74px;
+  height: 74px;
+  margin: 0 auto 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 800;
+  background: rgba(96,165,250,0.12);
+  border: 1px solid rgba(96,165,250,0.28);
+  color: #ffffff;
+}
+
+.decision-confirmation-card.is-accepted .decision-confirmation-icon {
+  background: rgba(74,222,128,0.14);
+  border-color: rgba(74,222,128,0.35);
+  color: #86efac;
+}
+
+.decision-confirmation-card.is-rejected .decision-confirmation-icon {
+  background: rgba(248,113,113,0.14);
+  border-color: rgba(248,113,113,0.35);
+  color: #fca5a5;
+}
+
+.decision-confirmation-card h2 {
+  margin: 0 0 10px;
+  font-size: 1.8rem;
+}
+
+.decision-confirmation-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.decision-confirmation-actions {
+  margin-top: 26px;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.decision-nav-btn {
+  max-width: 220px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===============================
+   Screen wipe transition
+================================ */
+
+.screen-wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  pointer-events: none;
+  background: linear-gradient(180deg, #0f172a 0%, #12263f 100%);
+  opacity: 1;
+  transform: translateY(100%);
+}
+
+.screen-wipe.wipe-in {
+  animation: fuelFairWipeIn 320ms ease forwards;
+}
+
+.screen-wipe.wipe-out {
+  animation: fuelFairWipeOut 380ms ease forwards;
+}
+@keyframes fuelFairScreenWipe {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(0%);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(0%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes fuelFairWipeIn {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0%);
+  }
+}
+
+@keyframes fuelFairWipeOut {
+  from {
+    transform: translateY(0%);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@media (max-width: 520px) {
+  .decision-confirmation-card {
+    padding: 28px 18px;
+  }
+
+  .decision-confirmation-card h2 {
+    font-size: 1.45rem;
+  }
+
+  .decision-confirmation-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .decision-nav-btn {
+    max-width: none;
+    width: 100%;
+  }
+}
+
+/* Full-page confirmation mode */
+body.decision-mode .calculator-card,
+body.decision-mode #target-npm-warning,
+body.decision-mode #score-threshold-warning,
+body.decision-mode #results-main,
+body.decision-mode #map {
+  display: none !important;
+}
+
+body.decision-mode #results-display {
+  display: flex !important;
+  justify-content: center;
+  align-items: center;
+  min-height: 70vh;
+}
+
+body.decision-mode #decision-confirmation {
+  display: flex !important;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+/* hide page header during confirmation state */
+body.decision-mode #page-header {
+  display: none !important;
+}
+
+.auth-switch a {
+  color: #7dd3fc;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-switch a:hover {
+  text-decoration: underline;
+}
+
+/* Fuel Map Page */
+
+/* Fuel Map Page */
+
+.fuel-map-layout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.fuel-panel {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.fuel-panel h2,
+.fuel-panel h3 {
+  margin-top: 0;
+}
+
+.fuel-map-box {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  height: 70vh;
+  min-height: 520px;
+}
+
+#fuel-map {
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  display: block;
+}
+
+.station-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.station-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.03);
+}
+
+.muted {
+  opacity: 0.72;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .fuel-map-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .fuel-map-box {
+    order: 1;
+    width: 100%;
+    height: 320px;
+    min-height: 320px;
+    margin-bottom: 14px;
+  }
+
+  .fuel-panel {
+    order: 2;
+    width: 100%;
+  }
+
+  #fuel-map {
+    width: 100%;
+    height: 100%;
+    min-height: 320px;
+  }
+}
+
+.save-btn,
+.save-btn:link,
+.save-btn:visited {
+  text-decoration: none;
+  color: white;
+}
+
+.fuel-map-btn {
+  background: linear-gradient(180deg, #facc15, #eab308);
+  color: #111827;
+  border: 1px solid rgba(0,0,0,0.25);
+}
+
+.fuel-map-btn:hover {
+  background: linear-gradient(180deg, #fde047, #facc15);
+  transform: translateY(-1px);
+}
+
+
+.fuel-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  margin-top: 2px;
+  margin-left: 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* Diesel badge */
+.fuel-badge.diesel {
+  background: rgba(34,197,94,0.18);
+  border: 1px solid rgba(34,197,94,0.45);
+  color: #4ade80;
+}
+
+/* Gas badge */
+.fuel-badge.gas {
+  background: rgba(59,130,246,0.18);
+  border: 1px solid rgba(59,130,246,0.45);
+  color: #60a5fa;
+}
+
+
+.load-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.load-header strong {
+  line-height: 1.3;
+}
+
+/* =========================
+   ENTRY / FIRST VISIT PAGE
+========================= */
+
+/* =========================
+   ENTRY PAGE (APP THEME)
+========================= */
+
+.entry-container {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.entry-page {
+  max-width: 860px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 60px 24px 48px;
+}
+
+.entry-brand {
+  font-size: 64px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.entry-tagline {
+  opacity: 0.75;
+  margin: 0 0 36px;
+}
+
+.entry-headline {
+  font-size: 42px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 22px;
+}
+
+.entry-copy {
+  max-width: 760px;
+  margin: 0 auto 36px;
+  font-size: 20px;
+  opacity: 0.9;
+}
+
+.entry-cta {
+  display: inline-block;
+  background: linear-gradient(180deg, #fbbf24, #d97706);
+  color: #111827;
+  font-weight: 700;
+  padding: 14px 26px;
+  border-radius: 12px;
+  border: none;
+  text-decoration: none;
+  margin-bottom: 42px;
+  box-shadow: 0 10px 26px rgba(251, 191, 36, 0.25);
+}
+
+.entry-how {
+  margin-top: 24px;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
+}
+
+.entry-accordion-toggle {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+  user-select: none;
+}
+
+.entry-chevron {
+  margin-left: 8px;
+  opacity: 0.7;
+}
+
+.entry-accordion-content {
+  display: none;
+}
+
+.entry-accordion-content.open {
+  display: block;
+}
+
+.entry-helper {
+  text-align: center;
+  margin: 0 0 22px;
+  opacity: 0.85;
+}
+
+.entry-step {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.entry-step-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.entry-step-copy {
+  line-height: 1.45;
+}
+
+.entry-footer-info {
+  max-width: 760px;
+  margin: 34px auto 0;
+  text-align: left;
+}
+
+.entry-built {
+  text-align: center;
+  margin: 0 0 20px;
+  font-size: 18px;
+}
+
+.entry-bottom {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 16px;
+  align-items: start;
+}
+
+.entry-bottom-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.entry-benefits {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.entry-benefits li {
+  margin-bottom: 8px;
+}
+
+.entry-support {
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .entry-page {
+    padding: 48px 18px 40px;
+  }
+
+  .entry-brand {
+    font-size: 48px;
+  }
+
+  .entry-headline {
+    font-size: 32px;
+  }
+
+  .entry-copy {
+    font-size: 18px;
+  }
+
+  .entry-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .entry-footer-info {
+    margin-top: 28px;
   }
 }
